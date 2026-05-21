@@ -131,7 +131,7 @@ export function ChatPage() {
     }
   }
 
-  async function handleFileSend(file, message = "") {
+  async function handleFileSend(file, message = "", metadata = {}) {
     if (!file || isSending) {
       return;
     }
@@ -142,16 +142,22 @@ export function ChatPage() {
       return;
     }
 
-    const imageUrl = isImage ? URL.createObjectURL(file) : null;
+    const objectUrl = URL.createObjectURL(file);
     
     const userMessage = createMessage(
       "user",
       isImage
         ? `${trimmedMessage}\n[Immagine: ${file.name}]`
-        : `[Audio: ${file.name}]`
+        : ""
     );
-    // Add image preview if it's an image
-    if (isImage) userMessage.image = imageUrl;
+    if (isImage) {
+      userMessage.image = objectUrl;
+    } else {
+      userMessage.audio = {
+        url: objectUrl,
+        durationMs: metadata.durationMs || 0,
+      };
+    }
 
     const pendingMessage = createMessage("assistant", "", true);
 
@@ -177,7 +183,12 @@ export function ChatPage() {
       if (response.extracted_text) {
         setMessages(currentMessages => currentMessages.map(msg => 
           msg.id === userMessage.id 
-            ? { ...msg, text: `${msg.text}\n\n"${response.extracted_text}"` } 
+            ? {
+                ...msg,
+                text: isImage
+                  ? `${msg.text}\n\n"${response.extracted_text}"`
+                  : `"${response.extracted_text}"`,
+              }
             : msg
         ));
       }

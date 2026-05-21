@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+
 import { chatBotUrl, chatUserDarkUrl, chatUserUrl } from "../assets/index.js";
 
 export function MessageList({ messages, listRef, mobileActionSlot, theme, t }) {
@@ -53,12 +55,109 @@ function ChatMessage({ message, theme, t }) {
                 aria-hidden="true"
               />
             ) : null}
+            {message.audio ? (
+              <AudioWaveform audio={message.audio} label={t.audioMessage} />
+            ) : null}
             {message.text}
           </>
         )}
       </div>
     </article>
   );
+}
+
+function AudioWaveform({ audio, label }) {
+  const audioRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [durationMs, setDurationMs] = useState(audio?.durationMs || 0);
+  const bars = [12, 18, 10, 24, 16, 28, 14, 22, 12, 18, 26, 15, 21, 11];
+  const audioUrl = typeof audio === "object" ? audio.url : null;
+
+  useEffect(() => {
+    setDurationMs(audio?.durationMs || 0);
+    setIsPlaying(false);
+  }, [audio?.durationMs, audioUrl]);
+
+  async function handleTogglePlayback() {
+    const audioElement = audioRef.current;
+    if (!audioElement) {
+      return;
+    }
+
+    if (isPlaying) {
+      audioElement.pause();
+      setIsPlaying(false);
+      return;
+    }
+
+    try {
+      await audioElement.play();
+      setIsPlaying(true);
+    } catch (_error) {
+      setIsPlaying(false);
+    }
+  }
+
+  function handleLoadedMetadata() {
+    const audioElement = audioRef.current;
+    if (!audioElement || durationMs > 0) {
+      return;
+    }
+
+    if (Number.isFinite(audioElement.duration)) {
+      setDurationMs(audioElement.duration * 1000);
+    }
+  }
+
+  return (
+    <div className="audio-waveform" aria-label={label || "Audio message"}>
+      <button
+        className="audio-play-button"
+        type="button"
+        aria-label={isPlaying ? "Pausa audio" : "Riproduci audio"}
+        disabled={!audioUrl}
+        onClick={handleTogglePlayback}
+      >
+        {isPlaying ? (
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="7" y="5" width="3.5" height="14" rx="1" />
+            <rect x="13.5" y="5" width="3.5" height="14" rx="1" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </button>
+      <span className="audio-bars" aria-hidden="true">
+        {bars.map((height, index) => (
+          <span key={`${height}-${index}`} style={{ height }} />
+        ))}
+      </span>
+      <span className="audio-duration">{formatDuration(durationMs)}</span>
+      {audioUrl ? (
+        <audio
+          ref={audioRef}
+          preload="metadata"
+          src={audioUrl}
+          onEnded={(event) => {
+            event.currentTarget.currentTime = 0;
+            setIsPlaying(false);
+          }}
+          onLoadedMetadata={handleLoadedMetadata}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function formatDuration(durationMs) {
+  const totalSeconds =
+    durationMs > 0 ? Math.max(1, Math.ceil(durationMs / 1000)) : 0;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function WelcomeMessage({ t }) {

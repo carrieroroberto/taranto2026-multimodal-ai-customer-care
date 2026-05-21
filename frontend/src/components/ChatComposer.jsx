@@ -7,6 +7,9 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const recordingStartedAtRef = useRef(0);
+  const audioDurationMsRef = useRef(0);
+  const audioShouldSendRef = useRef(false);
   const audioChunksRef = useRef([]);
   const trimmedMessage = message.trim();
   const hasText = trimmedMessage.length > 0;
@@ -16,6 +19,8 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
   const removeImageLabel = t.removeImage || "Remove image";
   const recordAudioLabel = t.recordAudio || "Record audio";
   const stopRecordingLabel = t.stopRecording || "Stop recording";
+  const cancelRecordingLabel = t.cancelRecording || stopRecordingLabel;
+  const sendAudioLabel = t.sendAudio || t.sendMessage;
   const stopMessageLabel = t.stopMessage || "Stop";
 
   useEffect(() => {
@@ -30,7 +35,12 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
       return;
     }
 
-    if (!hasText || isRecording) {
+    if (isRecording) {
+      stopRecording(true);
+      return;
+    }
+
+    if (!hasText) {
       return;
     }
 
@@ -91,8 +101,7 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
 
   async function toggleRecording() {
     if (isRecording) {
-      mediaRecorderRef.current?.stop();
-      setIsRecording(false);
+      stopRecording(false);
     } else {
       if (!canStartRecording) {
         return;
@@ -103,6 +112,8 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
+        audioDurationMsRef.current = 0;
+        audioShouldSendRef.current = false;
 
         mediaRecorder.ondataavailable = (event) => {
           if (event.data.size > 0) {
@@ -111,22 +122,44 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
         };
 
         mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-          const file = new File([audioBlob], "recording.wav", { type: "audio/wav" });
-          if (onFileSend) {
-            onFileSend(file);
+          if (audioShouldSendRef.current && onFileSend && audioChunksRef.current.length) {
+            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+            const file = new File([audioBlob], "recording.wav", { type: "audio/wav" });
+            onFileSend(file, "", { durationMs: audioDurationMsRef.current });
           }
-          // Stop all tracks to release the microphone
+
           stream.getTracks().forEach(track => track.stop());
+          audioChunksRef.current = [];
+          audioDurationMsRef.current = 0;
+          audioShouldSendRef.current = false;
+          mediaRecorderRef.current = null;
+          recordingStartedAtRef.current = 0;
+          setIsRecording(false);
         };
 
         mediaRecorder.start();
+        recordingStartedAtRef.current = performance.now();
         setIsRecording(true);
       } catch (error) {
         console.error("Error accessing microphone:", error);
         alert("Non è stato possibile accedere al microfono.");
       }
     }
+  }
+
+  function stopRecording(shouldSend) {
+    audioShouldSendRef.current = shouldSend;
+    audioDurationMsRef.current = recordingStartedAtRef.current
+      ? Math.max(0, performance.now() - recordingStartedAtRef.current)
+      : 0;
+    const mediaRecorder = mediaRecorderRef.current;
+
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+      setIsRecording(false);
+      return;
+    }
+
+    mediaRecorder.stop();
   }
 
   return (
@@ -183,16 +216,16 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
         <button
           type="button"
           className={`composer-action-button ${
-            isRecording ? "composer-action-button-active" : ""
+            isRecording ? "composer-action-button-selected" : ""
           }`}
           onClick={toggleRecording}
           disabled={isSending || (!isRecording && !canStartRecording)}
-          title={isRecording ? stopRecordingLabel : recordAudioLabel}
-          aria-label={isRecording ? stopRecordingLabel : recordAudioLabel}
+          title={isRecording ? cancelRecordingLabel : recordAudioLabel}
+          aria-label={isRecording ? cancelRecordingLabel : recordAudioLabel}
         >
           {isRecording ? (
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
             </svg>
           ) : (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -209,8 +242,8 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
             isSending ? "send-button-stop" : ""
           }`}
           type="submit"
-          aria-label={isSending ? stopMessageLabel : t.sendMessage}
-          disabled={!isSending && (isRecording || !hasText)}
+          aria-label={isSending ? stopMessageLabel : isRecording ? sendAudioLabel : t.sendMessage}
+          disabled={!isSending && !isRecording && !hasText}
         >
           {isSending ? (
             <svg className="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="currentColor">
