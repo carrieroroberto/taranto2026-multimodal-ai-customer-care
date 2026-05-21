@@ -12,6 +12,15 @@ logger = logging.getLogger(__name__)
 # We use 'base' for speed, can be changed to 'small' or 'medium'
 _whisper_model = None
 
+_AUDIO_SUFFIX_BY_CONTENT_TYPE = {
+    "audio/aac": ".aac",
+    "audio/mp4": ".m4a",
+    "audio/mpeg": ".mp3",
+    "audio/ogg": ".ogg",
+    "audio/wav": ".wav",
+    "audio/webm": ".webm",
+}
+
 def get_whisper_model():
     global _whisper_model
     if _whisper_model is None:
@@ -24,7 +33,7 @@ async def transcribe_audio(file: UploadFile) -> str:
     model = get_whisper_model()
     
     # Save the uploaded file to a temporary location
-    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=_get_upload_suffix(file)) as tmp:
         content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
@@ -38,6 +47,15 @@ async def transcribe_audio(file: UploadFile) -> str:
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+def _get_upload_suffix(file: UploadFile) -> str:
+    filename_suffix = os.path.splitext(file.filename or "")[1]
+    if filename_suffix:
+        return filename_suffix
+
+    content_type = (file.content_type or "").split(";")[0].lower()
+    return _AUDIO_SUFFIX_BY_CONTENT_TYPE.get(content_type, ".audio")
 
 async def extract_text_from_image(file: UploadFile) -> str:
     """Extracts text from an image file using Tesseract OCR."""

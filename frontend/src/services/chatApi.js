@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE = getDefaultApiBase();
+const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
 export async function sendChatMessage({ message, sessionId, signal }) {
   const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/chat`, {
@@ -33,7 +33,11 @@ export async function sendMultimodalMessage({ file, message, sessionId, signal }
     formData.append("session_id", sessionId);
   }
 
-  const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/chat/multimodal`, {
+  const endpoint = file.type.startsWith("audio/")
+    ? `${DEFAULT_API_BASE}/chat/audio`
+    : `${DEFAULT_API_BASE}/chat/multimodal`;
+
+  const response = await fetchWithTimeout(endpoint, {
     method: "POST",
     body: formData,
     timeoutMs: 300000, // 5 minutes for multimodal processing
@@ -95,10 +99,3 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-function getDefaultApiBase() {
-  if (window.location.protocol.startsWith("http") && window.location.hostname) {
-    return `${window.location.protocol}//${window.location.hostname}:8000`;
-  }
-
-  return "http://127.0.0.1:8000";
-}

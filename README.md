@@ -60,7 +60,7 @@ cp .env.example .env
 Start the containers:
 
 ```bash
-docker compose up --build -d
+docker compose up --build
 ```
 
 The root `docker-compose.yml` orchestrates separate backend and frontend images:
@@ -68,6 +68,7 @@ The root `docker-compose.yml` orchestrates separate backend and frontend images:
 ```text
 backend    -> backend:dev, container backend
 frontend   -> frontend:dev, container frontend
+cloudflared -> HTTPS tunnel for mobile/PWA testing
 vector-db  -> ChromaDB, container vector-db
 llm        -> Ollama, container llm
 llm-init   -> one-shot model pull helper
@@ -86,13 +87,29 @@ The Docker-started frontend is available at:
 http://127.0.0.1:5173
 ```
 
+For iPhone Safari, Android browser or PWA standalone testing, use the HTTPS tunnel URL printed by the `cloudflared` container:
+
+```bash
+docker compose logs -f cloudflared
+```
+
+Copy the generated URL:
+
+```text
+https://<temporary-name>.trycloudflare.com
+```
+
+iOS Safari requires a secure HTTPS context for `getUserMedia()` microphone access. The `trycloudflare.com` tunnel exposes the Vite frontend over HTTPS, and Vite proxies `/api` to the backend inside Docker, so the frontend can call FastAPI without mixed-content or CORS issues.
+
 The `frontend` service runs Vite and waits for the backend health check before starting. For frontend-only development after the first install, use:
 
 ```bash
 docker compose up frontend
 ```
 
-The frontend calls the backend `/chat` endpoint on port `8000` by default. The UI intentionally exposes only the conversation surface: no API configuration, retrieval details, source panel, map panel or suggested questions are shown in the current prototype.
+The frontend calls the backend only through relative `/api/...` paths. Vite proxies those calls to `http://backend:8000` inside Docker. Do not use local IP addresses or hardcoded backend hosts in frontend code.
+
+The UI intentionally exposes only the conversation surface: no API configuration, retrieval details, source panel, map panel or suggested questions are shown in the current prototype.
 
 The first startup can take time because it downloads `BAAI/bge-m3`, pulls `qwen3:8b` and ingests the KB if Chroma is empty or was created with a different embedding model. Hugging Face and Ollama models are stored in Docker volumes, so code-only changes do not download them again.
 
@@ -104,17 +121,26 @@ Health:
 
 ```bash
 curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/health
 ```
 
 Chat:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/chat \
+curl -X POST http://127.0.0.1:8000/api/chat \
   -H "Content-Type: application/json" \
   -d "{\"message\":\"I biglietti per Taranto 2026 sono gia disponibili?\"}"
 ```
 
-`/chat` is the only runtime conversation endpoint. It builds a small query plan, retrieves context from Chroma, calls Ollama with a guarded prompt and returns `answer`, `sources`, `maps`, `should_escalate`, `reason` and optional `ticket_draft`. The `answer` field is conversational text only; source URLs are returned as strings in `sources`, while `maps` is a single optional Google Maps URL.
+Main conversation endpoints:
+
+```text
+POST /api/chat
+POST /api/chat/audio
+POST /api/chat/multimodal
+```
+
+`/api/chat` builds a query plan, retrieves context from Chroma, calls Ollama with a guarded prompt and returns `answer`, `sources`, `maps`, `should_escalate`, `reason` and optional `ticket_draft`. `/api/chat/audio` accepts an audio `UploadFile`, transcribes it and returns the same response shape. `/api/chat/multimodal` is used for image + text requests. The `answer` field is conversational text only; source URLs are returned as strings in `sources`, while `maps` is a single optional Google Maps URL.
 
 The target LLM is `qwen3:8b`. On the standard GPU workstation profile, keep `USE_LLM_QUERY_PARSER=true`, `N_RESULTS=8`, `LLM_CONTEXT_WINDOW=4096` and `MAX_CONTEXT_CHARS=3200`: the parser first normalizes/classifies/expands the user query, then Chroma retrieves and reranks multiple records, then the answer layer generates the final grounded response. On a CPU-only development machine, use a smaller model and disable the LLM query parser only for quick local debugging.
 
@@ -132,7 +158,7 @@ python -m pip install -r backend/requirements.txt
 uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Use the HTTP `/chat` endpoint for RAG testing.
+Use the HTTP `/api/chat` endpoint for RAG testing.
 
 ## Configuration
 
@@ -158,6 +184,8 @@ MAX_CONTEXT_CHARS
 USE_LLM_QUERY_PARSER
 QUERY_PARSER_TIMEOUT_SECONDS
 QUERY_PARSER_NUM_PREDICT
+VITE_API_BASE_URL
+VITE_PROXY_TARGET
 ```
 
 Default local KB path is `backend/data/kb.jsonl`.

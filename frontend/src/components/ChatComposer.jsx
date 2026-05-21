@@ -107,9 +107,19 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
         return;
       }
 
+      let stream;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
+        if (typeof MediaRecorder === "undefined") {
+          throw new Error("MediaRecorder is not supported by this browser.");
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorderOptions = getSupportedAudioRecorderOptions();
+        const mediaRecorder = recorderOptions
+          ? new MediaRecorder(stream, recorderOptions)
+          : new MediaRecorder(stream);
+        const audioMimeType =
+          mediaRecorder.mimeType || recorderOptions?.mimeType || "audio/mp4";
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
         audioDurationMsRef.current = 0;
@@ -123,8 +133,11 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
 
         mediaRecorder.onstop = async () => {
           if (audioShouldSendRef.current && onFileSend && audioChunksRef.current.length) {
-            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-            const file = new File([audioBlob], "recording.wav", { type: "audio/wav" });
+            const audioBlob = new Blob(audioChunksRef.current, { type: audioMimeType });
+            const extension = getAudioFileExtension(audioMimeType);
+            const file = new File([audioBlob], `recording.${extension}`, {
+              type: audioMimeType,
+            });
             const waveform = await createWaveformFromBlob(audioBlob);
             onFileSend(file, "", {
               durationMs: audioDurationMsRef.current,
@@ -145,6 +158,7 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
         recordingStartedAtRef.current = performance.now();
         setIsRecording(true);
       } catch (error) {
+        stream?.getTracks().forEach((track) => track.stop());
         console.error("Error accessing microphone:", error);
         alert("Non è stato possibile accedere al microfono.");
       }
@@ -268,6 +282,49 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
       </div>
     </form>
   );
+}
+
+const AUDIO_RECORDER_MIME_TYPES = [
+  "audio/mp4",
+  "audio/aac",
+  "audio/webm;codecs=opus",
+  "audio/webm",
+];
+
+function getSupportedAudioRecorderOptions() {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) {
+    return undefined;
+  }
+
+  const mimeType = AUDIO_RECORDER_MIME_TYPES.find((candidateMimeType) =>
+    MediaRecorder.isTypeSupported(candidateMimeType),
+  );
+
+  return mimeType ? { mimeType } : undefined;
+}
+
+function getAudioFileExtension(mimeType) {
+  if (mimeType.includes("mp4")) {
+    return "m4a";
+  }
+
+  if (mimeType.includes("aac")) {
+    return "aac";
+  }
+
+  if (mimeType.includes("webm")) {
+    return "webm";
+  }
+
+  if (mimeType.includes("ogg")) {
+    return "ogg";
+  }
+
+  if (mimeType.includes("wav")) {
+    return "wav";
+  }
+
+  return "audio";
 }
 
 async function createWaveformFromBlob(audioBlob, barCount = 18) {

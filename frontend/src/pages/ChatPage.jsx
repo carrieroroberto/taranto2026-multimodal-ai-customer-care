@@ -146,9 +146,7 @@ export function ChatPage() {
     
     const userMessage = createMessage(
       "user",
-      isImage
-        ? `${trimmedMessage}\n[Immagine: ${file.name}]`
-        : ""
+      isImage ? trimmedMessage : ""
     );
     if (isImage) {
       userMessage.image = objectUrl;
