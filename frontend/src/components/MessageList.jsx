@@ -1,16 +1,18 @@
 import { chatBotUrl, chatUserDarkUrl, chatUserUrl } from "../assets/index.js";
 
-export function MessageList({ messages, listRef, theme, t }) {
+export function MessageList({ messages, listRef, mobileActionSlot, theme, t }) {
   return (
     <div
       ref={listRef}
       id="messageList"
       className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
-      aria-live="polite"
     >
-      {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} theme={theme} t={t} />
-      ))}
+      <div aria-live="polite">
+        {messages.map((message) => (
+          <ChatMessage key={message.id} message={message} theme={theme} t={t} />
+        ))}
+      </div>
+      {mobileActionSlot}
     </div>
   );
 }
@@ -55,7 +57,8 @@ function WelcomeMessage({ t }) {
       {t.welcomePrefix} <strong>{t.botName}</strong>
       {t.welcomeMiddle}
       <strong>{t.eventName}</strong>
-      {t.welcomeSuffix}
+      {" "}
+      <strong>{t.welcomeSuffix.trim()}</strong>
     </>
   );
 }

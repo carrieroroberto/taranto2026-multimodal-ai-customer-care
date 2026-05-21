@@ -225,22 +225,6 @@ export function ChatPage() {
         onLocaleChange={handleLocaleChange}
         onThemeToggle={handleThemeToggle}
       />
-      <div className="floating-mobile-actions">
-        <LanguageSelector
-          className="language-select-mobile"
-          locale={locale}
-          locales={SUPPORTED_LOCALES}
-          t={t}
-          onLocaleChange={handleLocaleChange}
-        />
-        <ThemeToggle
-          className="theme-toggle-mobile"
-          theme={theme}
-          t={t}
-          onThemeToggle={handleThemeToggle}
-        />
-      </div>
-
       <main className="main-stage relative z-10">
         <div className="chat-card-frame w-full max-w-5xl">
           <section className="chat-shell flex h-full w-full flex-col overflow-hidden">
@@ -248,6 +232,23 @@ export function ChatPage() {
             <MessageList
               messages={messages}
               listRef={messageListRef}
+              mobileActionSlot={
+                <div className="floating-mobile-actions">
+                  <LanguageSelector
+                    className="language-select-mobile"
+                    locale={locale}
+                    locales={SUPPORTED_LOCALES}
+                    t={t}
+                    onLocaleChange={handleLocaleChange}
+                  />
+                  <ThemeToggle
+                    className="theme-toggle-mobile"
+                    theme={theme}
+                    t={t}
+                    onThemeToggle={handleThemeToggle}
+                  />
+                </div>
+              }
               theme={theme}
               t={t}
             />
