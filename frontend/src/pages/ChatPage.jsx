@@ -156,6 +156,7 @@ export function ChatPage() {
       userMessage.audio = {
         url: objectUrl,
         durationMs: metadata.durationMs || 0,
+        waveform: metadata.waveform || null,
       };
     }
 

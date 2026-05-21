@@ -121,11 +121,15 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
           }
         };
 
-        mediaRecorder.onstop = () => {
+        mediaRecorder.onstop = async () => {
           if (audioShouldSendRef.current && onFileSend && audioChunksRef.current.length) {
             const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
             const file = new File([audioBlob], "recording.wav", { type: "audio/wav" });
-            onFileSend(file, "", { durationMs: audioDurationMsRef.current });
+            const waveform = await createWaveformFromBlob(audioBlob);
+            onFileSend(file, "", {
+              durationMs: audioDurationMsRef.current,
+              waveform,
+            });
           }
 
           stream.getTracks().forEach(track => track.stop());
@@ -264,4 +268,48 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
       </div>
     </form>
   );
+}
+
+async function createWaveformFromBlob(audioBlob, barCount = 18) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+
+  let audioContext;
+  try {
+    audioContext = new AudioContextClass();
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    const channelData = audioBuffer.getChannelData(0);
+    const samplesPerBar = Math.max(1, Math.floor(channelData.length / barCount));
+    const rawBars = [];
+
+    for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
+      const start = barIndex * samplesPerBar;
+      const end =
+        barIndex === barCount - 1
+          ? channelData.length
+          : Math.min(channelData.length, start + samplesPerBar);
+      let sum = 0;
+
+      for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+        sum += channelData[sampleIndex] ** 2;
+      }
+
+      const sampleCount = Math.max(1, end - start);
+      rawBars.push(Math.sqrt(sum / sampleCount));
+    }
+
+    const maxAmplitude = Math.max(...rawBars, 0.001);
+    return rawBars.map((amplitude) =>
+      Math.round(8 + (amplitude / maxAmplitude) * 22),
+    );
+  } catch (_error) {
+    return null;
+  } finally {
+    if (audioContext?.state !== "closed") {
+      audioContext?.close?.();
+    }
+  }
 }

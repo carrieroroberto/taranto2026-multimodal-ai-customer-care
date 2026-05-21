@@ -70,7 +70,8 @@ function AudioWaveform({ audio, label }) {
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [durationMs, setDurationMs] = useState(audio?.durationMs || 0);
-  const bars = [12, 18, 10, 24, 16, 28, 14, 22, 12, 18, 26, 15, 21, 11];
+  const fallbackBars = [12, 18, 10, 24, 16, 28, 14, 22, 12, 18, 26, 15, 21, 11];
+  const bars = audio?.waveform?.length ? audio.waveform : fallbackBars;
   const audioUrl = typeof audio === "object" ? audio.url : null;
 
   useEffect(() => {
