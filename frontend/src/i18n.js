@@ -1,0 +1,193 @@
+export const LOCALE_STORAGE_KEY = "tarai-locale";
+
+export const SUPPORTED_LOCALES = [
+  { code: "it", flag: "🇮🇹", name: "Italiano", htmlLang: "it", dir: "ltr" },
+  { code: "en", flag: "🇬🇧", name: "English", htmlLang: "en", dir: "ltr" },
+  { code: "es", flag: "🇪🇸", name: "Español", htmlLang: "es", dir: "ltr" },
+  { code: "fr", flag: "🇫🇷", name: "Français", htmlLang: "fr", dir: "ltr" },
+  { code: "ar", flag: "🇸🇦", name: "العربية", htmlLang: "ar", dir: "rtl" },
+];
+
+export const DEFAULT_LOCALE = "en";
+
+export const translations = {
+  it: {
+    appTitle: "TarAI | Giochi del Mediterraneo",
+    appSubtitle: "Assistente AI Multimodale per Taranto 2026",
+    pageTitle:
+      "TarAI | Assistente AI Multimodale per i Giochi del Mediterraneo 2026 a Taranto",
+    dateRange: "21 AGO - 3 SET 2026",
+    languageLabel: "Lingua",
+    botName: "TARA",
+    userLabel: "Utente",
+    online: "Online",
+    countdownLabel: "Mancano",
+    countdownUnits: { days: "gg", hours: "h", minutes: "m", seconds: "s" },
+    gamesStarted: "Giochi in corso",
+    officialSiteAria: "Apri il sito ufficiale Taranto 2026",
+    messageLabel: "Messaggio",
+    messagePlaceholder: "Scrivi un messaggio...",
+    sendMessage: "Invia messaggio",
+    uploadImage: "Invia immagine",
+    recordAudio: "Registra audio",
+    stopRecording: "Ferma registrazione",
+    typing: "Risposta in preparazione",
+    unavailableAnswer: "Risposta non disponibile.",
+    errorPrefix: "Si è verificato un errore:",
+    themeToLight: "Passa alla modalità chiara",
+    themeToDark: "Passa alla modalità scura",
+    welcomePrefix: "Ciao, sono",
+    welcomeMiddle: "! Come posso aiutarti per i ",
+    eventName: "Giochi del Mediterraneo 2026",
+    welcomeSuffix: " a Taranto?",
+  },
+  en: {
+    appTitle: "TarAI | Mediterranean Games",
+    appSubtitle: "Multimodal AI Assistant for Taranto 2026",
+    pageTitle:
+      "TarAI | Multimodal AI Assistant for the 2026 Mediterranean Games in Taranto",
+    dateRange: "21 AUG - 3 SEP 2026",
+    languageLabel: "Language",
+    botName: "TARA",
+    userLabel: "User",
+    online: "Online",
+    countdownLabel: "Time left",
+    countdownUnits: { days: "d", hours: "h", minutes: "m", seconds: "s" },
+    gamesStarted: "Games in progress",
+    officialSiteAria: "Open the official Taranto 2026 website",
+    messageLabel: "Message",
+    messagePlaceholder: "Write a message...",
+    sendMessage: "Send message",
+    stopMessage: "Stop",
+    uploadImage: "Upload image",
+    recordAudio: "Record audio",
+    stopRecording: "Stop recording",
+    typing: "Preparing response",
+    unavailableAnswer: "Answer unavailable.",
+    errorPrefix: "An error occurred:",
+    themeToLight: "Switch to light mode",
+    themeToDark: "Switch to dark mode",
+    welcomePrefix: "Hi, I am",
+    welcomeMiddle: "! How can I help you with the ",
+    eventName: "2026 Mediterranean Games",
+    welcomeSuffix: " in Taranto?",
+  },
+  es: {
+    appTitle: "TarAI | Juegos Mediterráneos",
+    appSubtitle: "Asistente de IA multimodal para Taranto 2026",
+    pageTitle:
+      "TarAI | Asistente de IA multimodal para los Juegos Mediterráneos 2026 en Tarento",
+    dateRange: "21 AGO - 3 SEP 2026",
+    languageLabel: "Idioma",
+    botName: "TARA",
+    userLabel: "Usuario",
+    online: "En línea",
+    countdownLabel: "Faltan",
+    countdownUnits: { days: "d", hours: "h", minutes: "m", seconds: "s" },
+    gamesStarted: "Juegos en curso",
+    officialSiteAria: "Abrir el sitio oficial de Taranto 2026",
+    messageLabel: "Mensaje",
+    messagePlaceholder: "Escribe un messaggio...",
+    sendMessage: "Enviar mensaje",
+    typing: "Preparando respuesta",
+    unavailableAnswer: "Respuesta no disponible.",
+    errorPrefix: "Se ha producido un error:",
+    themeToLight: "Cambiar a modo claro",
+    themeToDark: "Cambiar a modo oscuro",
+    welcomePrefix: "Hola, soy",
+    welcomeMiddle: ". ¿Cómo puedo ayudarte con los ",
+    eventName: "Juegos Mediterráneos 2026",
+    welcomeSuffix: " en Tarento?",
+  },
+  fr: {
+    appTitle: "TarAI | Jeux méditerranéens",
+    appSubtitle: "Assistant IA multimodal pour Tarente 2026",
+    pageTitle:
+      "TarAI | Assistant IA multimodal pour les Jeux méditerranéens 2026 à Tarente",
+    dateRange: "21 AOÛT - 3 SEPT. 2026",
+    languageLabel: "Langue",
+    botName: "TARA",
+    userLabel: "Utilisateur",
+    online: "En ligne",
+    countdownLabel: "Restent",
+    countdownUnits: { days: "j", hours: "h", minutes: "m", seconds: "s" },
+    gamesStarted: "Jeux en cours",
+    officialSiteAria: "Ouvrir le site officiel Taranto 2026",
+    messageLabel: "Message",
+    messagePlaceholder: "Écrivez un message...",
+    sendMessage: "Envoyer le message",
+    typing: "Réponse en preparazione",
+    unavailableAnswer: "Réponse non disponibile.",
+    errorPrefix: "Une errore s’est produite :",
+    themeToLight: "Passer au mode clair",
+    themeToDark: "Passer au mode sombre",
+    welcomePrefix: "Bonjour, je suis",
+    welcomeMiddle: ". Comment puis-je vous aider pour les ",
+    eventName: "Jeux méditerranéens 2026",
+    welcomeSuffix: " à Tarente ?",
+  },
+  ar: {
+    appTitle: "TarAI | ألعاب البحر الأبيض المتوسط",
+    appSubtitle: "مساعد ذكاء اصطناعي متعدد الوسائط لتارانتو 2026",
+    pageTitle:
+      "TarAI | مساعد ذكاء اصطناعي متعدد الوسائط لألعاب البحر الأبيض المتوسط 2026 في تارانتو",
+    dateRange: "21 أغسطس - 3 سبتمبر 2026",
+    languageLabel: "اللغة",
+    botName: "TARA",
+    userLabel: "المستخدم",
+    online: "متصل",
+    countdownLabel: "المتبقي",
+    countdownUnits: { days: "ي", hours: "س", minutes: "د", seconds: "ث" },
+    gamesStarted: "الألعاب جارية",
+    officialSiteAria: "افتح الموقع الرسمي لتارانتو 2026",
+    messageLabel: "رسالة",
+    messagePlaceholder: "اكتب رسالة...",
+    sendMessage: "إرسal الرسالة",
+    typing: "يتم تحضير الرد",
+    unavailableAnswer: "الإجابة غير متاحة.",
+    errorPrefix: "حدث خطأ:",
+    themeToLight: "التبديل إلى الوضع الفاتح",
+    themeToDark: "التبديل إلى الوضع الداكن",
+    welcomePrefix: "مرحبًا، أنا",
+    welcomeMiddle: "! كيف يمكنني مساعدتك بخصوص ",
+    eventName: "ألعاب البحر الأبيض المتوسط 2026",
+    welcomeSuffix: " في تارانتو؟",
+  },
+};
+
+export function getLocaleConfig(locale) {
+  return (
+    SUPPORTED_LOCALES.find((supportedLocale) => supportedLocale.code === locale) ||
+    SUPPORTED_LOCALES[0]
+  );
+}
+
+export function getInitialLocale() {
+  if (typeof window === "undefined") {
+    return DEFAULT_LOCALE;
+  }
+
+  const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+  if (isSupportedLocale(savedLocale)) {
+    return savedLocale;
+  }
+
+  const browserLanguages = navigator.languages?.length
+    ? navigator.languages
+    : [navigator.language];
+
+  for (const browserLanguage of browserLanguages) {
+    const locale = browserLanguage?.toLowerCase().split("-")[0];
+    if (isSupportedLocale(locale)) {
+      return locale;
+    }
+  }
+
+  return DEFAULT_LOCALE;
+}
+
+function isSupportedLocale(locale) {
+  return SUPPORTED_LOCALES.some(
+    (supportedLocale) => supportedLocale.code === locale,
+  );
+}

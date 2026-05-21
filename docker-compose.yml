@@ -1,0 +1,137 @@
+name: app
+
+services:
+  vector-db:
+    image: chromadb/chroma:0.5.23
+    container_name: vector-db
+    ports:
+      - "8001:8000"
+    volumes:
+      - vector_data:/chroma/chroma
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+
+  llm:
+    image: ollama/ollama:latest
+    container_name: llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - llm_data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  llm-init:
+    image: ollama/ollama:latest
+    container_name: llm-init
+    depends_on:
+      - llm
+    environment:
+      OLLAMA_HOST: http://llm:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
+      QUERY_PARSER_MODEL: ${QUERY_PARSER_MODEL:-qwen3:8b}
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "until ollama list >/dev/null 2>&1; do sleep 2; done;
+      ANSWER_MODEL=$${OLLAMA_MODEL:-qwen3:8b};
+      PARSER_MODEL=$${QUERY_PARSER_MODEL:-$${ANSWER_MODEL}};
+      ollama pull $${ANSWER_MODEL};
+      if [ \"$${PARSER_MODEL}\" != \"$${ANSWER_MODEL}\" ]; then ollama pull $${PARSER_MODEL}; fi"
+    restart: "no"
+
+  backend:
+    image: backend:dev
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    depends_on:
+      - vector-db
+      - llm
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - model_cache:/models/huggingface
+    env_file:
+      - .env
+    environment:
+      CHROMA_HOST: vector-db
+      CHROMA_PORT: "8000"
+      KB_PATH: /app/backend/data/kb.jsonl
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      OLLAMA_BASE_URL: ${BACKEND_OLLAMA_BASE_URL:-http://llm:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:8b}
+      QUERY_PARSER_MODEL: ${QUERY_PARSER_MODEL:-qwen3:8b}
+      AUTO_INGEST_ON_STARTUP: ${AUTO_INGEST_ON_STARTUP:-true}
+      FORCE_REINGEST_ON_STARTUP: ${FORCE_REINGEST_ON_STARTUP:-false}
+      N_RESULTS: ${N_RESULTS:-8}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-150}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      LLM_NUM_PREDICT: ${LLM_NUM_PREDICT:-220}
+      LLM_CONTEXT_WINDOW: ${LLM_CONTEXT_WINDOW:-4096}
+      MAX_CONTEXT_CHARS: ${MAX_CONTEXT_CHARS:-3200}
+      USE_LLM_QUERY_PARSER: ${USE_LLM_QUERY_PARSER:-true}
+      QUERY_PARSER_TIMEOUT_SECONDS: ${QUERY_PARSER_TIMEOUT_SECONDS:-150}
+      QUERY_PARSER_NUM_PREDICT: ${QUERY_PARSER_NUM_PREDICT:-420}
+      HF_HOME: /models/huggingface
+      PYTHONPATH: /app
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    image: frontend:dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    stdin_open: true
+    tty: true
+
+volumes:
+  vector_data:
+    name: vector_data
+  model_cache:
+    name: model_cache
+  llm_data:
+    name: llm_data
+  frontend_node_modules:
+    name: frontend_node_modules
+
+networks:
+  default:
+    name: app_network

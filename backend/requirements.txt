@@ -1,0 +1,15 @@
+chromadb==0.5.23
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+pydantic==2.13.4
+sentence-transformers==3.3.1
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
+numpy==2.2.1
+overrides==7.7.0
+python-dotenv==1.0.1
+setuptools
+openai-whisper
+pytesseract==0.3.13
+Pillow==11.0.0
+python-multipart==0.0.19
