@@ -23,9 +23,12 @@ export async function sendChatMessage({ message, sessionId, signal }) {
   return payload;
 }
 
-export async function sendMultimodalMessage({ file, sessionId, signal }) {
+export async function sendMultimodalMessage({ file, message, sessionId, signal }) {
   const formData = new FormData();
   formData.append("file", file);
+  if (message) {
+    formData.append("message", message);
+  }
   if (sessionId) {
     formData.append("session_id", sessionId);
   }
@@ -60,9 +63,20 @@ async function parseJsonResponse(response) {
 }
 
 async function fetchWithTimeout(url, options = {}) {
-  const { timeoutMs = 30000, ...fetchOptions } = options;
+  const { timeoutMs = 30000, signal, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  let didTimeout = false;
+  const timeoutId = window.setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
+
+  const abortFromCaller = () => controller.abort();
+  if (signal?.aborted) {
+    abortFromCaller();
+  } else {
+    signal?.addEventListener("abort", abortFromCaller, { once: true });
+  }
 
   try {
     return await fetch(url, {
@@ -70,13 +84,14 @@ async function fetchWithTimeout(url, options = {}) {
       signal: controller.signal,
     });
   } catch (error) {
-    if (error.name === "AbortError") {
+    if (error.name === "AbortError" && didTimeout) {
       throw new Error("Timeout della richiesta");
     }
 
     throw error;
   } finally {
     window.clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", abortFromCaller);
   }
 }
 

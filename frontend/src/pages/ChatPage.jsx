@@ -131,17 +131,24 @@ export function ChatPage() {
     }
   }
 
-  async function handleFileSend(file) {
+  async function handleFileSend(file, message = "") {
     if (!file || isSending) {
       return;
     }
 
     const isImage = file.type.startsWith("image/");
+    const trimmedMessage = message.trim();
+    if (isImage && !trimmedMessage) {
+      return;
+    }
+
     const imageUrl = isImage ? URL.createObjectURL(file) : null;
     
     const userMessage = createMessage(
       "user",
-      isImage ? `[Immagine: ${file.name}]` : `[Audio: ${file.name}]`
+      isImage
+        ? `${trimmedMessage}\n[Immagine: ${file.name}]`
+        : `[Audio: ${file.name}]`
     );
     // Add image preview if it's an image
     if (isImage) userMessage.image = imageUrl;
@@ -161,6 +168,7 @@ export function ChatPage() {
     try {
       const response = await sendMultimodalMessage({
         file,
+        message: isImage ? trimmedMessage : undefined,
         sessionId: sessionIdRef.current,
         signal: controller.signal
       });

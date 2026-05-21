@@ -44,7 +44,17 @@ function ChatMessage({ message, theme, t }) {
         ) : message.translationKey === "welcome" ? (
           <WelcomeMessage t={t} />
         ) : (
-          message.text
+          <>
+            {message.image ? (
+              <img
+                className="message-image-preview"
+                src={message.image}
+                alt=""
+                aria-hidden="true"
+              />
+            ) : null}
+            {message.text}
+          </>
         )}
       </div>
     </article>

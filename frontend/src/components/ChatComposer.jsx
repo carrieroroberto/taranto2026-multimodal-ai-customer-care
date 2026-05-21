@@ -2,11 +2,21 @@ import { useEffect, useRef, useState } from "react";
 
 export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
   const [message, setMessage] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const trimmedMessage = message.trim();
+  const hasText = trimmedMessage.length > 0;
+  const hasSelectedImage = Boolean(selectedImage);
+  const canStartRecording = !isSending && !hasText && !hasSelectedImage;
+  const uploadImageLabel = t.uploadImage || "Upload image";
+  const removeImageLabel = t.removeImage || "Remove image";
+  const recordAudioLabel = t.recordAudio || "Record audio";
+  const stopRecordingLabel = t.stopRecording || "Stop recording";
+  const stopMessageLabel = t.stopMessage || "Stop";
 
   useEffect(() => {
     autosize();
@@ -20,12 +30,20 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
       return;
     }
 
-    const trimmedMessage = message.trim();
-    if (!trimmedMessage) {
+    if (!hasText || isRecording) {
       return;
     }
 
-    onSend(trimmedMessage);
+    if (selectedImage && onFileSend) {
+      onFileSend(selectedImage, trimmedMessage);
+      setSelectedImage(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } else {
+      onSend(trimmedMessage);
+    }
+
     setMessage("");
   }
 
@@ -53,16 +71,22 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
   }
 
   function handleImageClick() {
+    if (selectedImage) {
+      setSelectedImage(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
     fileInputRef.current?.click();
   }
 
   function handleFileChange(event) {
     const file = event.target.files?.[0];
-    if (file && onFileSend) {
-      onFileSend(file);
+    if (file?.type.startsWith("image/")) {
+      setSelectedImage(file);
     }
-    // Reset input so the same file can be selected again
-    event.target.value = "";
   }
 
   async function toggleRecording() {
@@ -70,6 +94,10 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
       mediaRecorderRef.current?.stop();
       setIsRecording(false);
     } else {
+      if (!canStartRecording) {
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaRecorder = new MediaRecorder(stream);
@@ -131,17 +159,25 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
 
         <button
           type="button"
-          className="composer-action-button"
+          className={`composer-action-button ${
+            selectedImage ? "composer-action-button-selected" : ""
+          }`}
           onClick={handleImageClick}
           disabled={isSending || isRecording}
-          title={t.uploadImage}
-          aria-label={t.uploadImage}
+          title={selectedImage ? removeImageLabel : uploadImageLabel}
+          aria-label={selectedImage ? removeImageLabel : uploadImageLabel}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <polyline points="21 15 16 10 5 21" />
-          </svg>
+          {selectedImage ? (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          )}
         </button>
 
         <button
@@ -150,9 +186,9 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
             isRecording ? "composer-action-button-active" : ""
           }`}
           onClick={toggleRecording}
-          disabled={isSending}
-          title={isRecording ? t.stopRecording : t.recordAudio}
-          aria-label={isRecording ? t.stopRecording : t.recordAudio}
+          disabled={isSending || (!isRecording && !canStartRecording)}
+          title={isRecording ? stopRecordingLabel : recordAudioLabel}
+          aria-label={isRecording ? stopRecordingLabel : recordAudioLabel}
         >
           {isRecording ? (
             <svg viewBox="0 0 24 24" fill="currentColor">
@@ -173,8 +209,8 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
             isSending ? "send-button-stop" : ""
           }`}
           type="submit"
-          aria-label={isSending ? t.stopMessage : t.sendMessage}
-          disabled={!isSending && (isRecording || !message.trim())}
+          aria-label={isSending ? stopMessageLabel : t.sendMessage}
+          disabled={!isSending && (isRecording || !hasText)}
         >
           {isSending ? (
             <svg className="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="currentColor">
