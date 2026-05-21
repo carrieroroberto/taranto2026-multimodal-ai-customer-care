@@ -15,3 +15,5 @@ frontend/dist/
 **/.vite/
 dist/
 .aider*
+agent.md
+BACKEND_HANDOFF.md

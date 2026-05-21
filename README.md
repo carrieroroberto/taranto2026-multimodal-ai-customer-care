@@ -1,4 +1,4 @@
-# RAG Assistant
+# Multimodal AI ChatBot for Customer Care: Mediterranean Games 2026 Taranto
 
 Full-stack RAG assistant with a FastAPI backend and a React/Vite frontend.
 
