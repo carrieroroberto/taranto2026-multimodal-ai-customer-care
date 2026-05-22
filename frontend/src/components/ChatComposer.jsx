@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 
+import { ImageLightbox } from "./ImageLightbox.jsx";
+
 export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
   const [message, setMessage] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImagePreviewUrl, setSelectedImagePreviewUrl] = useState(null);
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
+  const [isImageDragActive, setIsImageDragActive] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 767px)").matches
+      : false,
+  );
   const [isRecording, setIsRecording] = useState(false);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const imageDragDepthRef = useRef(0);
   const mediaRecorderRef = useRef(null);
   const recordingStartedAtRef = useRef(0);
   const audioDurationMsRef = useRef(0);
@@ -15,6 +26,9 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
   const hasText = trimmedMessage.length > 0;
   const hasSelectedImage = Boolean(selectedImage);
   const canStartRecording = !isSending && !hasText && !hasSelectedImage;
+  const canDropImage = !isMobileViewport && !isSending && !isRecording;
+  const canPasteImage = !isSending && !isRecording;
+  const shouldShowImageActionButton = !selectedImage || !isMobileViewport;
   const uploadImageLabel = t.uploadImage || "Upload image";
   const removeImageLabel = t.removeImage || "Remove image";
   const recordAudioLabel = t.recordAudio || "Record audio";
@@ -26,6 +40,143 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
   useEffect(() => {
     autosize();
   }, [message]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+
+    function handleViewportChange(event) {
+      setIsMobileViewport(event.matches);
+    }
+
+    setIsMobileViewport(mediaQuery.matches);
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener("change", handleViewportChange);
+    } else {
+      mediaQuery.addListener(handleViewportChange);
+    }
+
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener("change", handleViewportChange);
+      } else {
+        mediaQuery.removeListener(handleViewportChange);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedImage) {
+      setSelectedImagePreviewUrl(null);
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(selectedImage);
+    setSelectedImagePreviewUrl(previewUrl);
+
+    return () => {
+      URL.revokeObjectURL(previewUrl);
+    };
+  }, [selectedImage]);
+
+  useEffect(() => {
+    if (!canDropImage) {
+      imageDragDepthRef.current = 0;
+      setIsImageDragActive(false);
+      return undefined;
+    }
+
+    function resetDragState() {
+      imageDragDepthRef.current = 0;
+      setIsImageDragActive(false);
+    }
+
+    function handleWindowDragEnter(event) {
+      if (!hasDraggedImage(event.dataTransfer)) {
+        return;
+      }
+
+      event.preventDefault();
+      imageDragDepthRef.current += 1;
+      setIsImageDragActive(true);
+    }
+
+    function handleWindowDragOver(event) {
+      if (!hasDraggedImage(event.dataTransfer)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      setIsImageDragActive(true);
+    }
+
+    function handleWindowDragLeave(event) {
+      if (!hasDraggedImage(event.dataTransfer)) {
+        return;
+      }
+
+      event.preventDefault();
+      imageDragDepthRef.current = Math.max(0, imageDragDepthRef.current - 1);
+
+      const hasLeftWindow =
+        event.clientX <= 0 ||
+        event.clientY <= 0 ||
+        event.clientX >= window.innerWidth ||
+        event.clientY >= window.innerHeight;
+
+      if (hasLeftWindow || imageDragDepthRef.current === 0) {
+        resetDragState();
+      }
+    }
+
+    function handleWindowDrop(event) {
+      if (!hasDraggedImage(event.dataTransfer)) {
+        return;
+      }
+
+      event.preventDefault();
+      const imageFile = getDroppedImageFile(event.dataTransfer);
+      resetDragState();
+
+      if (imageFile) {
+        selectImageFile(imageFile);
+      }
+    }
+
+    window.addEventListener("dragenter", handleWindowDragEnter);
+    window.addEventListener("dragover", handleWindowDragOver);
+    window.addEventListener("dragleave", handleWindowDragLeave);
+    window.addEventListener("drop", handleWindowDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", handleWindowDragEnter);
+      window.removeEventListener("dragover", handleWindowDragOver);
+      window.removeEventListener("dragleave", handleWindowDragLeave);
+      window.removeEventListener("drop", handleWindowDrop);
+    };
+  }, [canDropImage]);
+
+  useEffect(() => {
+    if (!canPasteImage) {
+      return undefined;
+    }
+
+    function handleWindowPaste(event) {
+      const imageFile = getClipboardImageFile(event.clipboardData);
+      if (!imageFile) {
+        return;
+      }
+
+      event.preventDefault();
+      selectImageFile(imageFile);
+    }
+
+    window.addEventListener("paste", handleWindowPaste);
+
+    return () => {
+      window.removeEventListener("paste", handleWindowPaste);
+    };
+  }, [canPasteImage]);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -46,10 +197,7 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
 
     if (selectedImage && onFileSend) {
       onFileSend(selectedImage, trimmedMessage);
-      setSelectedImage(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      clearSelectedImage();
     } else {
       onSend(trimmedMessage);
     }
@@ -82,21 +230,33 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
 
   function handleImageClick() {
     if (selectedImage) {
-      setSelectedImage(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      clearSelectedImage();
       return;
     }
 
     fileInputRef.current?.click();
   }
 
+  function clearSelectedImage() {
+    setIsImagePreviewOpen(false);
+    setSelectedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function selectImageFile(file) {
+    if (!file?.type.startsWith("image/")) {
+      return;
+    }
+
+    setIsImagePreviewOpen(false);
+    setSelectedImage(file);
+  }
+
   function handleFileChange(event) {
     const file = event.target.files?.[0];
-    if (file?.type.startsWith("image/")) {
-      setSelectedImage(file);
-    }
+    selectImageFile(file);
   }
 
   async function toggleRecording() {
@@ -185,7 +345,11 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
       className="chat-composer shrink-0 border-t p-3 sm:p-4"
       onSubmit={handleSubmit}
     >
-      <div className="composer-shell flex items-center gap-2">
+      <div
+        className={`composer-shell flex items-center gap-2${
+          selectedImage ? " composer-shell-has-image" : ""
+        }${isImageDragActive ? " composer-shell-drag-active" : ""}`}
+      >
         <input
           type="file"
           ref={fileInputRef}
@@ -193,6 +357,35 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
           accept="image/*"
           onChange={handleFileChange}
         />
+
+        {selectedImagePreviewUrl ? (
+          <div className="composer-image-preview-wrap">
+            <button
+              className="composer-image-preview"
+              type="button"
+              aria-label={selectedImage?.name || uploadImageLabel}
+              onClick={() => setIsImagePreviewOpen(true)}
+            >
+              <img src={selectedImagePreviewUrl} alt="" aria-hidden="true" />
+            </button>
+            <button
+              className="composer-image-remove-mobile"
+              type="button"
+              aria-label={removeImageLabel}
+              onClick={clearSelectedImage}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.8"
+                aria-hidden="true"
+              >
+                <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        ) : null}
 
         <textarea
           ref={textareaRef}
@@ -208,28 +401,32 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
           onKeyDown={handleKeyDown}
         />
 
-        <button
-          type="button"
-          className={`composer-action-button ${
-            selectedImage ? "composer-action-button-selected" : ""
-          }`}
-          onClick={handleImageClick}
-          disabled={isSending || isRecording}
-          title={selectedImage ? removeImageLabel : uploadImageLabel}
-          aria-label={selectedImage ? removeImageLabel : uploadImageLabel}
-        >
-          {selectedImage ? (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-              <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-          )}
-        </button>
+        {shouldShowImageActionButton ? (
+          <button
+            type="button"
+            className={`composer-action-button composer-image-action ${
+              selectedImage
+                ? "composer-action-button-selected composer-image-action-selected"
+                : ""
+            }`}
+            onClick={handleImageClick}
+            disabled={isSending || isRecording}
+            title={selectedImage ? removeImageLabel : uploadImageLabel}
+            aria-label={selectedImage ? removeImageLabel : uploadImageLabel}
+          >
+            {selectedImage ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            )}
+          </button>
+        ) : null}
 
         <button
           type="button"
@@ -280,6 +477,13 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
           )}
         </button>
       </div>
+      {selectedImagePreviewUrl ? (
+        <ImageLightbox
+          closeLabel={t.closeImage}
+          image={isImagePreviewOpen ? selectedImagePreviewUrl : null}
+          onClose={() => setIsImagePreviewOpen(false)}
+        />
+      ) : null}
     </form>
   );
 }
@@ -325,6 +529,62 @@ function getAudioFileExtension(mimeType) {
   }
 
   return "audio";
+}
+
+function hasDraggedImage(dataTransfer) {
+  return Array.from(dataTransfer?.items || []).some(
+    (item) => item.kind === "file" && item.type.startsWith("image/"),
+  );
+}
+
+function getDroppedImageFile(dataTransfer) {
+  return Array.from(dataTransfer?.files || []).find((file) =>
+    file.type.startsWith("image/"),
+  );
+}
+
+function getClipboardImageFile(clipboardData) {
+  const fileFromClipboard = Array.from(clipboardData?.files || []).find(
+    (file) => file.type.startsWith("image/"),
+  );
+
+  if (fileFromClipboard) {
+    return fileFromClipboard;
+  }
+
+  const imageItem = Array.from(clipboardData?.items || []).find(
+    (item) => item.kind === "file" && item.type.startsWith("image/"),
+  );
+  const imageBlob = imageItem?.getAsFile?.();
+
+  if (!imageBlob) {
+    return null;
+  }
+
+  if (imageBlob.name) {
+    return imageBlob;
+  }
+
+  const extension = getImageFileExtension(imageBlob.type);
+  return new File([imageBlob], `clipboard-image.${extension}`, {
+    type: imageBlob.type,
+  });
+}
+
+function getImageFileExtension(mimeType) {
+  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) {
+    return "jpg";
+  }
+
+  if (mimeType.includes("webp")) {
+    return "webp";
+  }
+
+  if (mimeType.includes("gif")) {
+    return "gif";
+  }
+
+  return "png";
 }
 
 async function createWaveformFromBlob(audioBlob, barCount = 18) {

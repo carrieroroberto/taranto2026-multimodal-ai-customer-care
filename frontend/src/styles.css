@@ -438,6 +438,7 @@
       width: 24px;
       height: 24px;
     }
+
   }
 
   .main-stage {
@@ -579,6 +580,62 @@
     padding: 7px;
   }
 
+  .composer-shell-drag-active {
+    background: var(--composer-shell-focus-bg);
+    border-color: var(--focus-blue);
+    outline: 3px solid rgba(2, 132, 199, 0.18);
+    outline-offset: 3px;
+  }
+
+  .composer-image-preview-wrap {
+    position: relative;
+    display: flex;
+    width: 3.25rem;
+    height: 3.25rem;
+    flex: 0 0 3.25rem;
+  }
+
+  .composer-image-preview {
+    appearance: none;
+    display: flex;
+    width: 100%;
+    height: 100%;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    border: 1px solid var(--assistant-bubble-border);
+    border-radius: 18px;
+    background: var(--composer-action-bg);
+    box-shadow: var(--composer-action-shadow);
+    cursor: pointer;
+    transition:
+      transform 160ms ease,
+      filter 160ms ease;
+  }
+
+  .composer-image-preview:hover {
+    filter: brightness(1.03);
+    transform: translateY(-1px);
+  }
+
+  .composer-image-preview:focus-visible {
+    outline: 2px solid var(--focus-blue);
+    outline-offset: 3px;
+  }
+
+  .composer-image-preview img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .composer-image-remove-mobile {
+    display: none;
+  }
+
   .composer-action-button {
     @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-45;
     background: var(--composer-action-bg);
@@ -619,6 +676,53 @@
   .composer-action-button-selected:hover:not(:disabled) {
     background: var(--focus-blue);
     filter: brightness(0.94);
+  }
+
+  @media (max-width: 767px) {
+    .composer-shell .composer-image-action.composer-image-action-selected {
+      display: none !important;
+    }
+
+    .composer-shell-has-image {
+      gap: 0.3rem;
+    }
+
+    .composer-shell-has-image .composer-image-preview-wrap {
+      width: 2.9rem;
+      height: 2.9rem;
+      flex-basis: 2.9rem;
+    }
+
+    .composer-shell-has-image .message-textarea {
+      min-width: 0;
+      padding-left: 0.25rem;
+      padding-right: 0.35rem;
+    }
+
+    .composer-shell .composer-image-remove-mobile {
+      position: absolute;
+      top: -0.35rem;
+      right: -0.35rem;
+      z-index: 2;
+      display: inline-flex;
+      width: 1.35rem;
+      height: 1.35rem;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 2px solid var(--composer-shell-bg);
+      border-radius: 999px;
+      background: var(--focus-blue);
+      color: #ffffff;
+      box-shadow:
+        0 5px 12px rgba(15, 23, 42, 0.16),
+        0 2px 5px rgba(2, 132, 199, 0.22);
+    }
+
+    .composer-shell .composer-image-remove-mobile svg {
+      width: 0.78rem;
+      height: 0.78rem;
+    }
   }
 
   .send-button {
@@ -701,6 +805,10 @@
     color: var(--assistant-bubble-text);
   }
 
+  .chat-bubble.chat-bubble-with-sources {
+    max-width: min(88%, calc(100% - 3.25rem));
+  }
+
   .chat-bubble-user {
     @apply rounded-tr-md;
     background: var(--user-bubble-bg);
@@ -737,7 +845,7 @@
     border: 0;
     border-radius: 18px;
     background: transparent;
-    cursor: zoom-in;
+    cursor: pointer;
   }
 
   .message-image-button:focus-visible {
@@ -764,6 +872,10 @@
     text-align: left;
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .message-inline-tail {
+    white-space: nowrap;
   }
 
   .source-favicons {

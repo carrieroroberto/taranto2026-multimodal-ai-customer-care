@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import { chatBotUrl, chatUserDarkUrl, chatUserUrl } from "../assets/index.js";
+import { ImageLightbox } from "./ImageLightbox.jsx";
 
 const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
 
@@ -14,28 +14,6 @@ export function MessageList({
   onContentLoad,
 }) {
   const [previewImage, setPreviewImage] = useState(null);
-
-  useEffect(() => {
-    if (!previewImage) {
-      return undefined;
-    }
-
-    const previousBodyOverflow = document.body.style.overflow;
-
-    function handleKeyDown(event) {
-      if (event.key === "Escape") {
-        setPreviewImage(null);
-      }
-    }
-
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousBodyOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [previewImage]);
 
   return (
     <>
@@ -58,15 +36,11 @@ export function MessageList({
         </div>
         {mobileActionSlot}
       </div>
-      {previewImage && typeof document !== "undefined"
-        ? createPortal(
-            <ImageLightbox
-              image={previewImage}
-              onClose={() => setPreviewImage(null)}
-            />,
-            document.body,
-          )
-        : null}
+      <ImageLightbox
+        closeLabel={t.closeImage}
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </>
   );
 }
@@ -83,7 +57,7 @@ function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
     ? `chat-bubble chat-bubble-user${message.image ? " chat-bubble-image" : ""}`
     : message.isError
       ? "chat-bubble chat-bubble-error"
-      : "chat-bubble chat-bubble-assistant";
+      : `chat-bubble chat-bubble-assistant${sources.length ? " chat-bubble-with-sources" : ""}`;
 
   return (
     <article className={turnClassName}>
@@ -119,7 +93,15 @@ function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
             {message.audio ? (
               <AudioWaveform audio={message.audio} label={t.audioMessage} />
             ) : null}
-            {message.text ? (
+            {message.text && sources.length ? (
+              <TextWithInlineSources
+                className={
+                  message.image ? "message-text message-text-under-media" : ""
+                }
+                sources={sources}
+                text={message.text}
+              />
+            ) : message.text ? (
               <span
                 className={
                   message.image ? "message-text message-text-under-media" : ""
@@ -128,9 +110,6 @@ function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
                 {message.text}
               </span>
             ) : null}
-            {sources.length ? (
-              <SourceFavicons sources={sources} />
-            ) : null}
           </>
         )}
       </div>
@@ -138,37 +117,35 @@ function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
   );
 }
 
-function ImageLightbox({ image, onClose }) {
+function TextWithInlineSources({ className, sources, text }) {
+  const match = text.match(/(\S+)(\s*)$/);
+
+  if (!match) {
+    return (
+      <span className={className}>
+        <span className="message-inline-tail">
+          <SourceFavicons sources={sources} />
+        </span>
+      </span>
+    );
+  }
+
+  const lastWord = match[1];
+  const trailingWhitespace = match[2];
+  const prefix = text.slice(
+    0,
+    text.length - lastWord.length - trailingWhitespace.length,
+  );
+
   return (
-    <div
-      className="image-lightbox"
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-    >
-      <button
-        className="image-lightbox-close"
-        type="button"
-        aria-label="Chiudi immagine"
-        onClick={onClose}
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M6 6l12 12M18 6L6 18"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeWidth="2.4"
-          />
-        </svg>
-      </button>
-      <img
-        className="image-lightbox-image"
-        src={image}
-        alt=""
-        aria-hidden="true"
-        onClick={(event) => event.stopPropagation()}
-      />
-    </div>
+    <span className={className}>
+      {prefix}
+      <span className="message-inline-tail">
+        {lastWord}
+        {trailingWhitespace}
+        <SourceFavicons sources={sources} />
+      </span>
+    </span>
   );
 }
 
