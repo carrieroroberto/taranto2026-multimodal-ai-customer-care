@@ -1,27 +1,77 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { chatBotUrl, chatUserDarkUrl, chatUserUrl } from "../assets/index.js";
 
 const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
 
-export function MessageList({ messages, listRef, mobileActionSlot, theme, t }) {
+export function MessageList({
+  messages,
+  listRef,
+  mobileActionSlot,
+  theme,
+  t,
+  onContentLoad,
+}) {
+  const [previewImage, setPreviewImage] = useState(null);
+
+  useEffect(() => {
+    if (!previewImage) {
+      return undefined;
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setPreviewImage(null);
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [previewImage]);
+
   return (
-    <div
-      ref={listRef}
-      id="messageList"
-      className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
-    >
-      <div aria-live="polite">
-        {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} theme={theme} t={t} />
-        ))}
+    <>
+      <div
+        ref={listRef}
+        id="messageList"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
+      >
+        <div aria-live="polite">
+          {messages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              theme={theme}
+              t={t}
+              onImageOpen={setPreviewImage}
+              onContentLoad={onContentLoad}
+            />
+          ))}
+        </div>
+        {mobileActionSlot}
       </div>
-      {mobileActionSlot}
-    </div>
+      {previewImage && typeof document !== "undefined"
+        ? createPortal(
+            <ImageLightbox
+              image={previewImage}
+              onClose={() => setPreviewImage(null)}
+            />,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
-function ChatMessage({ message, theme, t }) {
+function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
   const isUser = message.role === "user";
   const userAvatarUrl = theme === "dark" ? chatUserDarkUrl : chatUserUrl;
   const sources = getVisibleSources(message, isUser);
@@ -51,12 +101,20 @@ function ChatMessage({ message, theme, t }) {
         ) : (
           <>
             {message.image ? (
-              <img
-                className="message-image-preview"
-                src={message.image}
-                alt=""
-                aria-hidden="true"
-              />
+              <button
+                className="message-image-button"
+                type="button"
+                aria-label="Apri immagine"
+                onClick={() => onImageOpen(message.image)}
+              >
+                <img
+                  className="message-image-preview"
+                  src={message.image}
+                  alt=""
+                  aria-hidden="true"
+                  onLoad={onContentLoad}
+                />
+              </button>
             ) : null}
             {message.audio ? (
               <AudioWaveform audio={message.audio} label={t.audioMessage} />
@@ -77,6 +135,40 @@ function ChatMessage({ message, theme, t }) {
         )}
       </div>
     </article>
+  );
+}
+
+function ImageLightbox({ image, onClose }) {
+  return (
+    <div
+      className="image-lightbox"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <button
+        className="image-lightbox-close"
+        type="button"
+        aria-label="Chiudi immagine"
+        onClick={onClose}
+      >
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M6 6l12 12M18 6L6 18"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="2.4"
+          />
+        </svg>
+      </button>
+      <img
+        className="image-lightbox-image"
+        src={image}
+        alt=""
+        aria-hidden="true"
+        onClick={(event) => event.stopPropagation()}
+      />
+    </div>
   );
 }
 

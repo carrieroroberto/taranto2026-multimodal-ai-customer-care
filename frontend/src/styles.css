@@ -728,15 +728,30 @@
     color: var(--error-text);
   }
 
-  .message-image-preview {
+  .message-image-button {
     display: block;
     width: var(--message-media-width);
     max-width: 100%;
-    max-height: 180px;
     margin-bottom: 0.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: 18px;
+    background: transparent;
+    cursor: zoom-in;
+  }
+
+  .message-image-button:focus-visible {
+    outline: 2px solid var(--focus-blue);
+    outline-offset: 3px;
+  }
+
+  .message-image-preview {
+    display: block;
+    width: 100%;
+    max-height: 180px;
+    border: 1px solid var(--assistant-bubble-border);
     border-radius: 18px;
     object-fit: cover;
-    border: 1px solid var(--assistant-bubble-border);
   }
 
   .message-text {
@@ -798,6 +813,64 @@
     min-width: min(250px, 100%);
     margin: 0.1rem 0;
     vertical-align: middle;
+  }
+
+  .image-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(1rem, env(safe-area-inset-top))
+      max(1rem, env(safe-area-inset-right))
+      max(1rem, env(safe-area-inset-bottom))
+      max(1rem, env(safe-area-inset-left));
+    background: rgba(2, 6, 23, 0.68);
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  }
+
+  .image-lightbox-image {
+    display: block;
+    max-width: min(92vw, 980px);
+    max-height: 82vh;
+    border: 1px solid rgba(224, 242, 254, 0.28);
+    border-radius: 24px;
+    object-fit: contain;
+    box-shadow:
+      0 30px 80px rgba(2, 6, 23, 0.45),
+      0 8px 22px rgba(2, 6, 23, 0.28);
+  }
+
+  .image-lightbox-close {
+    position: absolute;
+    top: max(1rem, env(safe-area-inset-top));
+    right: max(1rem, env(safe-area-inset-right));
+    display: inline-flex;
+    width: 2.75rem;
+    height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(224, 242, 254, 0.28);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition:
+      background 160ms ease,
+      transform 160ms ease;
+  }
+
+  .image-lightbox-close:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .image-lightbox-close svg {
+    width: 1.25rem;
+    height: 1.25rem;
   }
 
   .audio-play-button {

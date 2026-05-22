@@ -60,12 +60,39 @@ export function ChatPage() {
   }, [locale, localeConfig.dir, localeConfig.htmlLang, t.pageTitle]);
 
   useEffect(() => {
-    const messageListElement = messageListRef.current;
-    messageListElement?.scrollTo({
-      top: messageListElement.scrollHeight,
-      behavior: "smooth",
+    let secondFrameId = null;
+
+    const firstFrameId = window.requestAnimationFrame(() => {
+      scrollMessagesToBottom("smooth");
+      secondFrameId = window.requestAnimationFrame(() => {
+        scrollMessagesToBottom("smooth");
+      });
     });
+
+    const fallbackTimeoutId = window.setTimeout(() => {
+      scrollMessagesToBottom("smooth");
+    }, 120);
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+      window.clearTimeout(fallbackTimeoutId);
+    };
   }, [messages]);
+
+  function scrollMessagesToBottom(behavior = "smooth") {
+    const messageListElement = messageListRef.current;
+    if (!messageListElement) {
+      return;
+    }
+
+    messageListElement.scrollTo({
+      top: messageListElement.scrollHeight,
+      behavior,
+    });
+  }
 
   function handleStop() {
     if (abortControllerRef.current) {
@@ -276,6 +303,7 @@ export function ChatPage() {
               }
               theme={theme}
               t={t}
+              onContentLoad={() => scrollMessagesToBottom("smooth")}
             />
             <ChatComposer
               isSending={isSending}
