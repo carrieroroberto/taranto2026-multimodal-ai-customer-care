@@ -30,7 +30,7 @@ function ChatMessage({ message, theme, t }) {
     ? "chat-avatar chat-avatar-user"
     : "chat-avatar chat-avatar-assistant";
   const bubbleClassName = isUser
-    ? "chat-bubble chat-bubble-user"
+    ? `chat-bubble chat-bubble-user${message.image ? " chat-bubble-image" : ""}`
     : message.isError
       ? "chat-bubble chat-bubble-error"
       : "chat-bubble chat-bubble-assistant";
@@ -61,7 +61,15 @@ function ChatMessage({ message, theme, t }) {
             {message.audio ? (
               <AudioWaveform audio={message.audio} label={t.audioMessage} />
             ) : null}
-            {message.text}
+            {message.text ? (
+              <span
+                className={
+                  message.image ? "message-text message-text-under-media" : ""
+                }
+              >
+                {message.text}
+              </span>
+            ) : null}
             {sources.length ? (
               <SourceFavicons sources={sources} />
             ) : null}
