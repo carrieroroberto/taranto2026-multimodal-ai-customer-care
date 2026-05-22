@@ -79,7 +79,12 @@ export function ChatPage() {
         if (lastMessage?.role === "assistant" && lastMessage.isLoading) {
           return [
             ...currentMessages.slice(0, -1),
-            { ...lastMessage, text: "Richiesta interrotta.", isLoading: false, isError: true }
+            {
+              ...lastMessage,
+              text: t.stoppedResponse,
+              isLoading: false,
+              isError: true,
+            },
           ];
         }
         return currentMessages;
