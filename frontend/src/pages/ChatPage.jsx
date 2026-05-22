@@ -114,6 +114,7 @@ export function ChatPage() {
 
       patchMessage(pendingMessage.id, {
         text: response.answer || t.unavailableAnswer,
+        sources: normalizeSources(response.sources),
         isLoading: false,
       });
     } catch (error) {
@@ -194,6 +195,7 @@ export function ChatPage() {
 
       patchMessage(pendingMessage.id, {
         text: response.answer || t.unavailableAnswer,
+        sources: normalizeSources(response.sources),
         isLoading: false,
       });
     } catch (error) {
@@ -309,4 +311,14 @@ function createMessage(role, text, isLoading = false) {
     isLoading,
     isError: false,
   };
+}
+
+function normalizeSources(sources) {
+  if (!Array.isArray(sources)) {
+    return [];
+  }
+
+  return sources
+    .filter((source) => typeof source?.url === "string" && source.url.trim())
+    .slice(0, 3);
 }

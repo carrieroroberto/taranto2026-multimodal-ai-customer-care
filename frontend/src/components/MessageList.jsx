@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { chatBotUrl, chatUserDarkUrl, chatUserUrl } from "../assets/index.js";
 
+const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
+
 export function MessageList({ messages, listRef, mobileActionSlot, theme, t }) {
   return (
     <div
@@ -22,6 +24,7 @@ export function MessageList({ messages, listRef, mobileActionSlot, theme, t }) {
 function ChatMessage({ message, theme, t }) {
   const isUser = message.role === "user";
   const userAvatarUrl = theme === "dark" ? chatUserDarkUrl : chatUserUrl;
+  const sources = getVisibleSources(message, isUser);
   const turnClassName = isUser ? "chat-turn chat-turn-user" : "chat-turn";
   const avatarClassName = isUser
     ? "chat-avatar chat-avatar-user"
@@ -59,11 +62,64 @@ function ChatMessage({ message, theme, t }) {
               <AudioWaveform audio={message.audio} label={t.audioMessage} />
             ) : null}
             {message.text}
+            {sources.length ? <SourceFavicons sources={sources} /> : null}
           </>
         )}
       </div>
     </article>
   );
+}
+
+function SourceFavicons({ sources }) {
+  return (
+    <div className="source-favicons" aria-label="Sorgenti consultate">
+      {sources.map((source, index) => (
+        <a
+          key={`${source.url}-${index}`}
+          className="source-favicon-link"
+          href={source.url}
+          target="_blank"
+          rel="noreferrer"
+          title={source.title || source.url}
+        >
+          <img
+            src={getFaviconUrl(source.url)}
+            alt=""
+            aria-hidden="true"
+            onError={(event) => {
+              event.currentTarget.onerror = null;
+              event.currentTarget.src = FALLBACK_SOURCE_ICON;
+            }}
+          />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function getVisibleSources(message, isUser) {
+  if (
+    isUser ||
+    message.isError ||
+    message.isLoading ||
+    message.translationKey ||
+    !Array.isArray(message.sources)
+  ) {
+    return [];
+  }
+
+  return message.sources
+    .filter((source) => typeof source?.url === "string" && source.url.trim())
+    .slice(0, 3);
+}
+
+function getFaviconUrl(url) {
+  try {
+    const domain = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  } catch {
+    return FALLBACK_SOURCE_ICON;
+  }
 }
 
 function AudioWaveform({ audio, label }) {

@@ -725,6 +725,38 @@
     border: 1px solid var(--assistant-bubble-border);
   }
 
+  .source-favicons {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.7rem;
+  }
+
+  .source-favicon-link {
+    display: inline-flex;
+    width: 1.6rem;
+    height: 1.6rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--assistant-bubble-border);
+    border-radius: 999px;
+    background: var(--composer-shell-bg);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    transition:
+      background 160ms ease,
+      transform 160ms ease;
+  }
+
+  .source-favicon-link:hover {
+    transform: translateY(-1px);
+  }
+
+  .source-favicon-link img {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 4px;
+  }
+
   .audio-waveform {
     display: inline-flex;
     align-items: center;
