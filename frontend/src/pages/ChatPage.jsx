@@ -37,6 +37,7 @@ export function ChatPage() {
   const sessionIdRef = useRef(getOrCreateSessionId());
   const messageListRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const scrollAnimationFrameRef = useRef(null);
   const localeConfig = getLocaleConfig(locale);
   const t = translations[locale];
 
@@ -79,6 +80,10 @@ export function ChatPage() {
         window.cancelAnimationFrame(secondFrameId);
       }
       window.clearTimeout(fallbackTimeoutId);
+      if (scrollAnimationFrameRef.current) {
+        window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+        scrollAnimationFrameRef.current = null;
+      }
     };
   }, [messages]);
 
@@ -88,10 +93,47 @@ export function ChatPage() {
       return;
     }
 
-    messageListElement.scrollTo({
-      top: messageListElement.scrollHeight,
-      behavior,
-    });
+    const targetTop = Math.max(
+      0,
+      messageListElement.scrollHeight - messageListElement.clientHeight,
+    );
+
+    if (scrollAnimationFrameRef.current) {
+      window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+      scrollAnimationFrameRef.current = null;
+    }
+
+    if (behavior !== "smooth") {
+      messageListElement.scrollTop = targetTop;
+      return;
+    }
+
+    const startTop = messageListElement.scrollTop;
+    const distance = targetTop - startTop;
+
+    if (Math.abs(distance) < 1) {
+      return;
+    }
+
+    const durationMs = 260;
+    const startedAt = performance.now();
+
+    function animateScroll(now) {
+      const progress = Math.min((now - startedAt) / durationMs, 1);
+      const easedProgress = 1 - (1 - progress) ** 3;
+
+      messageListElement.scrollTop = startTop + distance * easedProgress;
+
+      if (progress < 1) {
+        scrollAnimationFrameRef.current =
+          window.requestAnimationFrame(animateScroll);
+      } else {
+        scrollAnimationFrameRef.current = null;
+      }
+    }
+
+    scrollAnimationFrameRef.current =
+      window.requestAnimationFrame(animateScroll);
   }
 
   function handleStop() {
@@ -270,6 +312,7 @@ export function ChatPage() {
           <section className="chat-shell flex h-full w-full flex-col overflow-hidden">
             <ChatHeader t={t} />
             <MessageList
+              isSending={isSending}
               messages={messages}
               listRef={messageListRef}
               mobileActionSlot={
@@ -289,9 +332,11 @@ export function ChatPage() {
                   />
                 </div>
               }
+              suggestedQuestions={t.welcomeSuggestions || []}
               theme={theme}
               t={t}
               onContentLoad={() => scrollMessagesToBottom("smooth")}
+              onSuggestionClick={handleSend}
             />
             <ChatComposer
               isSending={isSending}

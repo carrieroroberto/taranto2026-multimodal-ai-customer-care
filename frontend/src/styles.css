@@ -617,7 +617,6 @@
 
   .composer-image-preview:hover {
     filter: brightness(1.03);
-    transform: translateY(-1px);
   }
 
   .composer-image-preview:focus-visible {
@@ -788,6 +787,18 @@
     --tw-ring-color: var(--assistant-bubble-border);
   }
 
+  .chat-message-stack {
+    display: flex;
+    min-width: 0;
+    max-width: min(88%, calc(100% - 3.25rem));
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chat-message-stack > .chat-bubble {
+    max-width: 100%;
+  }
+
   .chat-bubble {
     @apply min-w-0 rounded-3xl border px-4 py-3 text-[15px] leading-6;
     box-sizing: border-box;
@@ -876,6 +887,51 @@
 
   .message-inline-tail {
     white-space: nowrap;
+  }
+
+  .welcome-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: center;
+    width: 100%;
+    margin-top: 0.55rem;
+  }
+
+  .welcome-suggestion-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.15rem;
+    max-width: 100%;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid rgba(125, 211, 252, 0.2);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--assistant-bubble-text);
+    font-size: 0.84rem;
+    font-weight: 500;
+    line-height: 1.2;
+    text-align: left;
+    white-space: normal;
+    opacity: 0.56;
+    box-shadow: none;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .welcome-suggestion-button:hover:not(:disabled) {
+    border-color: rgba(2, 132, 199, 0.42);
+    background: rgba(255, 255, 255, 0.14);
+    opacity: 0.82;
+  }
+
+  .welcome-suggestion-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.56;
   }
 
   .source-favicons {

@@ -47,6 +47,11 @@ export const translations = {
     welcomeMiddle: "! Come posso aiutarti per i ",
     eventName: "Giochi del Mediterraneo 2026",
     welcomeSuffix: " a Taranto?",
+    welcomeSuggestions: [
+      "Cosa sono?",
+      "Qual è il programma degli eventi?",
+      "Quali città sono coinvolte?",
+    ],
   },
 
   en: {
@@ -85,6 +90,11 @@ export const translations = {
     welcomeMiddle: "! How can I help you with the ",
     eventName: "Mediterranean Games 2026",
     welcomeSuffix: " in Taranto?",
+    welcomeSuggestions: [
+      "What are they?",
+      "What is the event schedule?",
+      "Which cities are involved?",
+    ],
   },
 
   es: {
@@ -123,6 +133,11 @@ export const translations = {
     welcomeMiddle: ". ¿Cómo puedo ayudarte con los ",
     eventName: "Juegos Mediterráneos 2026",
     welcomeSuffix: " en Taranto?",
+    welcomeSuggestions: [
+      "¿Qué son?",
+      "¿Cuál es el programa de eventos?",
+      "¿Qué ciudades participan?",
+    ],
   },
 
   fr: {
@@ -161,6 +176,11 @@ export const translations = {
     welcomeMiddle: ". Comment puis-je vous aider pour les ",
     eventName: "Jeux Méditerranéens 2026",
     welcomeSuffix: " à Taranto ?",
+    welcomeSuggestions: [
+      "Qu’est-ce que c’est ?",
+      "Quel est le programme des événements ?",
+      "Quelles villes sont impliquées ?",
+    ],
   },
 
   ar: {
@@ -199,6 +219,11 @@ export const translations = {
     welcomeMiddle: "! كيف يمكنني مساعدتك بخصوص ",
     eventName: "ألعاب البحر الأبيض المتوسط 2026",
     welcomeSuffix: " في تارانتو؟",
+    welcomeSuggestions: [
+      "ما هي؟",
+      "ما هو برنامج الفعاليات؟",
+      "ما المدن المشاركة؟",
+    ],
   },
 };
 

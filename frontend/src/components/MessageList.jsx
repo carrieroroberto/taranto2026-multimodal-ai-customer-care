@@ -6,12 +6,15 @@ import { ImageLightbox } from "./ImageLightbox.jsx";
 const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
 
 export function MessageList({
+  isSending,
   messages,
   listRef,
   mobileActionSlot,
+  suggestedQuestions = [],
   theme,
   t,
   onContentLoad,
+  onSuggestionClick,
 }) {
   const [previewImage, setPreviewImage] = useState(null);
 
@@ -31,6 +34,9 @@ export function MessageList({
               t={t}
               onImageOpen={setPreviewImage}
               onContentLoad={onContentLoad}
+              onSuggestionClick={onSuggestionClick}
+              showSuggestions={!isSending}
+              suggestedQuestions={suggestedQuestions}
             />
           ))}
         </div>
@@ -45,7 +51,16 @@ export function MessageList({
   );
 }
 
-function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
+function ChatMessage({
+  message,
+  theme,
+  t,
+  onImageOpen,
+  onContentLoad,
+  onSuggestionClick,
+  showSuggestions,
+  suggestedQuestions,
+}) {
   const isUser = message.role === "user";
   const userAvatarUrl = theme === "dark" ? chatUserDarkUrl : chatUserUrl;
   const sources = getVisibleSources(message, isUser);
@@ -67,53 +82,84 @@ function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
           alt={isUser ? t.userLabel : t.botName}
         />
       </div>
-      <div className={bubbleClassName}>
-        {message.isLoading ? (
-          <TypingIndicator label={t.typing} />
-        ) : message.translationKey === "welcome" ? (
-          <WelcomeMessage t={t} />
-        ) : (
-          <>
-            {message.image ? (
-              <button
-                className="message-image-button"
-                type="button"
-                aria-label="Apri immagine"
-                onClick={() => onImageOpen(message.image)}
-              >
-                <img
-                  className="message-image-preview"
-                  src={message.image}
-                  alt=""
-                  aria-hidden="true"
-                  onLoad={onContentLoad}
+      <div className="chat-message-stack">
+        <div className={bubbleClassName}>
+          {message.isLoading ? (
+            <TypingIndicator label={t.typing} />
+          ) : message.translationKey === "welcome" ? (
+            <WelcomeMessage t={t} />
+          ) : (
+            <>
+              {message.image ? (
+                <button
+                  className="message-image-button"
+                  type="button"
+                  aria-label="Apri immagine"
+                  onClick={() => onImageOpen(message.image)}
+                >
+                  <img
+                    className="message-image-preview"
+                    src={message.image}
+                    alt=""
+                    aria-hidden="true"
+                    onLoad={onContentLoad}
+                  />
+                </button>
+              ) : null}
+              {message.audio ? (
+                <AudioWaveform audio={message.audio} label={t.audioMessage} />
+              ) : null}
+              {message.text && sources.length ? (
+                <TextWithInlineSources
+                  className={
+                    message.image ? "message-text message-text-under-media" : ""
+                  }
+                  sources={sources}
+                  text={message.text}
                 />
-              </button>
-            ) : null}
-            {message.audio ? (
-              <AudioWaveform audio={message.audio} label={t.audioMessage} />
-            ) : null}
-            {message.text && sources.length ? (
-              <TextWithInlineSources
-                className={
-                  message.image ? "message-text message-text-under-media" : ""
-                }
-                sources={sources}
-                text={message.text}
-              />
-            ) : message.text ? (
-              <span
-                className={
-                  message.image ? "message-text message-text-under-media" : ""
-                }
-              >
-                {message.text}
-              </span>
-            ) : null}
-          </>
-        )}
+              ) : message.text ? (
+                <span
+                  className={
+                    message.image ? "message-text message-text-under-media" : ""
+                  }
+                >
+                  {message.text}
+                </span>
+              ) : null}
+            </>
+          )}
+        </div>
+        {message.translationKey === "welcome" ? (
+          <WelcomeSuggestions
+            disabled={!showSuggestions}
+            questions={suggestedQuestions}
+            onSuggestionClick={onSuggestionClick}
+          />
+        ) : null}
       </div>
     </article>
+  );
+}
+
+function WelcomeSuggestions({ disabled, questions, onSuggestionClick }) {
+  if (!questions.length) {
+    return null;
+  }
+
+  return (
+    <div className="welcome-suggestions">
+      {questions.map((question) => (
+        <button
+          key={question}
+          className="welcome-suggestion-button"
+          type="button"
+          disabled={disabled}
+          onClick={() => onSuggestionClick?.(question)}
+        >
+          {question}
+        </button>
+      ))}
+    </div>
   );
 }
 
