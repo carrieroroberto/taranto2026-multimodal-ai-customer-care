@@ -1,191 +1,396 @@
-# Multimodal AI ChatBot for Customer Care: Mediterranean Games 2026 Taranto
+# TarAI - Assistente AI Multimodale per i Giochi del Mediterraneo Taranto 2026
 
-Full-stack RAG assistant with a FastAPI backend and a React/Vite frontend.
+TarAI è un assistente customer-care multimodale per i Giochi del Mediterraneo di Taranto 2026. Il progetto combina una UI React installabile come PWA, un backend FastAPI e una pipeline RAG basata su ChromaDB, embedding semantici e LLM locale tramite Ollama.
 
-The project currently provides:
+L'obiettivo è fornire risposte utili, brevi e fondate sulla knowledge base del progetto, evitando di inventare date, prezzi, sedi, risultati live o informazioni non presenti nei dati recuperati.
 
-- JSONL knowledge-base validation and ingestion
-- ChromaDB storage
-- BAAI/bge-m3 embeddings
-- RAG retrieval with vector search, lightweight query planning and compact reranking
-- Qwen3 8B through Ollama for grounded answer generation
-- FastAPI runtime endpoints for health checks and chat
-- React/Vite/Tailwind frontend prototype for the customer-care chat flow
+## Stato Attuale
 
-## Project Layout
+Il progetto è una web app full-stack containerizzata con Docker Compose.
+
+- Frontend React/Vite con Tailwind CSS.
+- Backend FastAPI con endpoint testuali, audio e multimodali.
+- ChromaDB come vector database.
+- Ollama come servizio LLM locale.
+- Modello LLM configurato di default: `qwen3:8b`.
+- Modello embedding configurato di default: `BAAI/bge-m3`.
+- Tunnel HTTPS temporaneo con Cloudflare per test da iPhone, PWA e microfono.
+- UI multilingua: italiano, inglese, spagnolo, francese e arabo.
+- Tema chiaro/scuro con lettura automatica del tema di sistema e preferenza salvata in `localStorage`.
+
+## Funzionalità
+
+- Chat testuale con risposte generate dal backend.
+- Risposte grounded: il modello deve usare solo i contesti recuperati dalla knowledge base.
+- Query planning LLM per normalizzare la richiesta, gestire lingua, dominio e query di retrieval.
+- Retrieval multi-query su ChromaDB con fallback globale quando il filtro di dominio recupera pochi risultati.
+- Reranking leggero dei documenti recuperati.
+- Supporto multilingua della UI e risposta nella lingua selezionata/originaria.
+- Input multimodale:
+  - solo testo;
+  - testo + immagine;
+  - solo audio.
+- Registrazione audio con durata, playback e waveform.
+- Upload immagine da pulsante, drag and drop da tutta la finestra e copia/incolla.
+- Anteprima immagine prima dell'invio e lightbox per ingrandire immagini inviate o in preview.
+- PWA installabile su iPhone e Android.
+- Fonti mostrate come favicon cliccabili dopo le risposte del bot, quando disponibili.
+- Domande suggerite tradotte in base alla lingua della UI.
+- Countdown nell'header.
+
+## Architettura
+
+```text
+Utente
+  |
+  v
+Frontend React/Vite
+  |
+  |  /api/*
+  v
+Backend FastAPI
+  |
+  +--> Query Planner LLM
+  |
+  +--> ChromaDB retrieval + reranking
+  |
+  +--> Final Answer LLM
+  |
+  v
+Risposta grounded + fonti
+```
+
+Servizi Docker principali:
+
+| Servizio | Ruolo |
+| --- | --- |
+| `frontend` | App React/Vite sulla porta `5173` |
+| `backend` | API FastAPI sulla porta `8000` |
+| `vector-db` | ChromaDB sulla porta `8001` |
+| `llm` | Ollama per modelli locali |
+| `llm-init` | Pull automatico del modello LLM configurato |
+| `cloudflared` | Tunnel HTTPS temporaneo `trycloudflare.com` |
+
+## Struttura Del Repository
 
 ```text
 .
-|-- backend/
-|   |-- Dockerfile
-|   |-- requirements.txt
-|   |-- app/
-|   |   |-- api/              # FastAPI route modules
-|   |   |-- repositories/     # ChromaDB and KB access
-|   |   |-- schemas/          # request/response DTOs
-|   |   |-- services/
-|   |   |   |-- errors.py
-|   |   |   `-- rag_service.py
-|   |   |-- config.py
-|   |   |-- main.py
-|   `-- data/
-|       `-- kb.jsonl
-|-- frontend/                 # React/Vite/Tailwind frontend prototype
-|   |-- Dockerfile
-|   |-- index.html
-|   |-- package.json
-|   |-- postcss.config.js
-|   |-- src/
-|   |   |-- components/
-|   |   |-- pages/
-|   |   |-- services/
-|   |   |-- utils/
-|   |   |-- App.jsx
-|   |   |-- main.jsx
-|   |   `-- styles.css
-|   |-- tailwind.config.js
-|   `-- package-lock.json
-|-- docker-compose.yml
-`-- .env.example
+├── backend/
+│   ├── app/
+│   │   ├── api/              # Route FastAPI
+│   │   ├── repositories/     # Accesso a ChromaDB
+│   │   ├── schemas/          # Schemi request/response
+│   │   ├── services/         # RAG, LLM, OCR, ASR, visione
+│   │   ├── config.py
+│   │   └── main.py
+│   └── Dockerfile
+├── frontend/
+│   ├── public/
+│   │   ├── icons/            # Icone PWA e fallback favicon fonti
+│   │   └── manifest.json
+│   ├── src/
+│   │   ├── assets/           # Asset importati da React
+│   │   ├── components/       # Componenti UI
+│   │   ├── pages/            # Pagine React
+│   │   ├── services/         # Client API frontend
+│   │   ├── utils/            # Utility frontend
+│   │   ├── i18n.js
+│   │   ├── main.jsx
+│   │   └── styles.css
+│   └── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── .env.example
+└── README.md
 ```
 
-## Setup
+## Requisiti
 
-Create a local environment file:
+- Docker e Docker Compose.
+- Una GPU NVIDIA compatibile e runtime Docker NVIDIA se si usa il servizio Ollama locale con accelerazione GPU.
+- Spazio disco sufficiente per modelli LLM, embedding e volumi Docker.
+
+Il primo avvio puo' richiedere tempo per scaricare i modelli e inizializzare i dati.
+
+## Configurazione
+
+Copiare il file di esempio:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Su macOS/Linux:
 
 ```bash
 cp .env.example .env
 ```
 
-Start the containers:
+Variabili principali:
+
+| Variabile | Descrizione |
+| --- | --- |
+| `COLLECTION_NAME` | Nome collezione ChromaDB |
+| `EMBEDDING_MODEL` | Modello embedding |
+| `N_RESULTS` | Numero base di risultati recuperati |
+| `OLLAMA_MODEL` | Modello usato dal backend |
+| `QUERY_PARSER_MODEL` | Modello usato dal query planner |
+| `USE_LLM_QUERY_PARSER` | Abilita il planner LLM |
+| `VITE_API_BASE_URL` | Base API del frontend, di default `/api` |
+| `VITE_PROXY_TARGET` | Target proxy Vite verso il backend |
+
+Non inserire IP locali hardcoded nel frontend. Le chiamate devono passare da path relativi come `/api/chat`.
+
+## Avvio Con Docker
+
+Dalla root del progetto:
 
 ```bash
 docker compose up --build
 ```
 
-The root `docker-compose.yml` orchestrates separate backend and frontend images:
+Aprire da PC:
 
-```text
-backend    -> backend:dev, container backend
-frontend   -> frontend:dev, container frontend
-cloudflared -> HTTPS tunnel for mobile/PWA testing
-vector-db  -> ChromaDB, container vector-db
-llm        -> Ollama, container llm
-llm-init   -> one-shot model pull helper
+- Frontend: <http://localhost:5173>
+- Backend API docs: <http://localhost:8000/docs>
+- ChromaDB: <http://localhost:8001>
+
+Log utili:
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f cloudflared
 ```
 
-FastAPI is available at:
+Per fermare i servizi:
 
-```text
-http://127.0.0.1:8000
-http://127.0.0.1:8000/docs
+```bash
+docker compose down
 ```
 
-The Docker-started frontend is available at:
+Evitare `docker compose down -v` se non si vogliono cancellare volumi, modelli e dati indicizzati.
 
-```text
-http://127.0.0.1:5173
+## Accesso Da iPhone, Android E PWA
+
+Safari iOS richiede HTTPS per usare il microfono e per una PWA in modalità standalone. Per questo il progetto include `cloudflared`.
+
+Avviare tutto:
+
+```bash
+docker compose up --build
 ```
 
-For iPhone Safari, Android browser or PWA standalone testing, use the HTTPS tunnel URL printed by the `cloudflared` container:
+Poi leggere l'URL HTTPS temporaneo dai log:
 
 ```bash
 docker compose logs -f cloudflared
 ```
 
-Copy the generated URL:
+Cercare un URL simile a:
 
 ```text
-https://<temporary-name>.trycloudflare.com
+https://nome-casuale.trycloudflare.com
 ```
 
-iOS Safari requires a secure HTTPS context for `getUserMedia()` microphone access. The `trycloudflare.com` tunnel exposes the Vite frontend over HTTPS, and Vite proxies `/api` to the backend inside Docker, so the frontend can call FastAPI without mixed-content or CORS issues.
+Da iPhone:
 
-The `frontend` service runs Vite and waits for the backend health check before starting. For frontend-only development after the first install, use:
+1. Aprire quell'URL in Safari.
+2. Verificare chat e microfono.
+3. Per installare la PWA: Condividi -> Aggiungi alla schermata Home.
+4. Aprire TarAI dall'icona installata.
 
-```bash
-docker compose up frontend
+Il tunnel gratuito è temporaneo: a ogni riavvio puo' cambiare URL.
+
+## API Principali
+
+Le API sono esposte dal backend e raggiunte dal frontend tramite proxy `/api`.
+
+### Health
+
+```http
+GET /health
+GET /api/health
 ```
 
-The frontend calls the backend only through relative `/api/...` paths. Vite proxies those calls to `http://backend:8000` inside Docker. Do not use local IP addresses or hardcoded backend hosts in frontend code.
+### Chat Testuale
 
-The UI intentionally exposes only the conversation surface: no API configuration, retrieval details, source panel, map panel or suggested questions are shown in the current prototype.
-
-The first startup can take time because it downloads `BAAI/bge-m3`, pulls `qwen3:8b` and ingests the KB if Chroma is empty or was created with a different embedding model. Hugging Face and Ollama models are stored in Docker volumes, so code-only changes do not download them again.
-
-During development the backend runs with Uvicorn reload and `./backend` mounted into the container. For code-only changes, do not rebuild the image: keep Compose running and wait for the backend process to reload, or run `docker compose restart backend` if needed. Use `docker compose build backend` only after changing `backend/requirements.txt`, `backend/Dockerfile` or dependency-related settings. Avoid `docker compose down -v` unless you intentionally want to delete Chroma, Hugging Face and Ollama cached volumes.
-
-## Runtime API
-
-Health:
-
-```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/api/health
-```
-
-Chat:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d "{\"message\":\"I biglietti per Taranto 2026 sono gia disponibili?\"}"
-```
-
-Main conversation endpoints:
-
-```text
+```http
 POST /api/chat
+Content-Type: application/json
+```
+
+Esempio:
+
+```json
+{
+  "message": "Quando iniziano i Giochi del Mediterraneo di Taranto 2026?",
+  "session_id": "sessione-demo",
+  "language": "it"
+}
+```
+
+### Chat Audio
+
+```http
 POST /api/chat/audio
+Content-Type: multipart/form-data
+```
+
+Campi:
+
+- `file`: file audio registrato.
+- `session_id`: opzionale.
+- `language`: opzionale.
+
+### Chat Multimodale
+
+```http
 POST /api/chat/multimodal
+Content-Type: multipart/form-data
 ```
 
-`/api/chat` builds a query plan, retrieves context from Chroma, calls Ollama with a guarded prompt and returns `answer`, `sources`, `maps`, `should_escalate`, `reason` and optional `ticket_draft`. `/api/chat/audio` accepts an audio `UploadFile`, transcribes it and returns the same response shape. `/api/chat/multimodal` is used for image + text requests. The `answer` field is conversational text only; source URLs are returned as strings in `sources`, while `maps` is a single optional Google Maps URL.
+Campi principali:
 
-The target LLM is `qwen3:8b`. On the standard GPU workstation profile, keep `USE_LLM_QUERY_PARSER=true`, `N_RESULTS=8`, `LLM_CONTEXT_WINDOW=4096` and `MAX_CONTEXT_CHARS=3200`: the parser first normalizes/classifies/expands the user query, then Chroma retrieves and reranks multiple records, then the answer layer generates the final grounded response. On a CPU-only development machine, use a smaller model and disable the LLM query parser only for quick local debugging.
+- `message`: testo dell'utente.
+- `image`: immagine opzionale.
+- `audio`: audio opzionale.
+- `session_id`: opzionale.
+- `language`: opzionale.
 
-For a GPU workstation, install NVIDIA Container Toolkit and verify that Ollama can see the GPU before the demo. The backend image uses CPU PyTorch for embeddings, while Ollama serves the LLM; Hugging Face models and Ollama models remain in Docker volumes, so code-only changes should be handled with backend reload/restart and should not redownload model or package caches.
+Il frontend applica già le combinazioni consentite:
 
-## Local Run Without Docker
+- testo;
+- testo + immagine;
+- audio.
 
-Chroma must be reachable at `CHROMA_HOST` and `CHROMA_PORT`.
+## Sviluppo Frontend
 
-PowerShell example:
+Il frontend è un progetto React/Vite.
 
-```powershell
-$env:PYTHONPATH="."
-python -m pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
-Use the HTTP `/api/chat` endpoint for RAG testing.
+La configurazione Vite espone l'app su `0.0.0.0:5173` e inoltra `/api` al backend.
 
-## Configuration
+Note di sviluppo:
 
-Environment variables:
+- Non usare URL backend assoluti come `http://localhost:8000` nel codice React.
+- Usare sempre `/api/...`.
+- Gli asset importati dai componenti stanno in `frontend/src/assets`.
+- I file statici pubblici, manifest PWA e icone installabili stanno in `frontend/public`.
 
-```text
-COLLECTION_NAME
-EMBEDDING_MODEL
-N_RESULTS
-INGEST_BATCH_SIZE
-KB_PATH
-CHROMA_HOST
-CHROMA_PORT
-AUTO_INGEST_ON_STARTUP
-FORCE_REINGEST_ON_STARTUP
-OLLAMA_BASE_URL
-OLLAMA_MODEL
-LLM_TIMEOUT_SECONDS
-LLM_TEMPERATURE
-LLM_NUM_PREDICT
-LLM_CONTEXT_WINDOW
-MAX_CONTEXT_CHARS
-USE_LLM_QUERY_PARSER
-QUERY_PARSER_TIMEOUT_SECONDS
-QUERY_PARSER_NUM_PREDICT
-VITE_API_BASE_URL
-VITE_PROXY_TARGET
+## Sviluppo Backend
+
+Il backend è basato su FastAPI.
+
+Responsabilità principali:
+
+- validazione request/response;
+- gestione sessione;
+- trascrizione audio;
+- analisi immagine/OCR quando disponibile;
+- query planning LLM;
+- retrieval e reranking;
+- generazione della risposta finale.
+
+In Docker il backend comunica con:
+
+- ChromaDB tramite `vector-db:8000`;
+- Ollama tramite `llm:11434`.
+
+Per modifiche backend durante lo sviluppo puo' essere necessario riavviare il container:
+
+```bash
+docker compose restart backend
 ```
 
-Default local KB path is `backend/data/kb.jsonl`.
+## Knowledge Base E Retrieval
+
+La knowledge base viene indicizzata in ChromaDB e interrogata dal RAG service.
+
+La pipeline desiderata è:
+
+1. analisi della query utente tramite LLM planner;
+2. normalizzazione/traduzione semantica della query per il retrieval;
+3. retrieval multi-query su ChromaDB;
+4. fallback globale se il filtro di dominio recupera pochi risultati;
+5. merge, deduplicazione e reranking;
+6. generazione finale usando solo i contesti recuperati.
+
+La logica Python non dovrebbe dipendere da lunghi dizionari hardcoded di sport, città, sinonimi o keyword. Alias, varianti e metadati dovrebbero stare nella knowledge base.
+
+## Convenzioni Importanti
+
+- Il frontend deve usare solo path relativi `/api`.
+- Il backend deve evitare risposte inventate se il dato non è nel contesto.
+- Le fonti devono essere mostrate solo se il backend le restituisce.
+- Il messaggio iniziale della UI non mostra fonti.
+- I messaggi di errore non mostrano fonti.
+- Il microfono su iOS va testato da HTTPS, quindi tramite URL Cloudflare.
+- Le preferenze UI di tema e lingua vengono salvate in `localStorage`.
+
+## Troubleshooting
+
+### Il frontend è bianco
+
+Controllare i log:
+
+```bash
+docker compose logs -f frontend
+```
+
+Poi ricostruire:
+
+```bash
+docker compose up --build frontend
+```
+
+### Il backend non risponde
+
+Controllare:
+
+```bash
+docker compose logs -f backend
+docker compose ps
+```
+
+Verificare anche che ChromaDB e Ollama siano avviati.
+
+### Il modello non è pronto
+
+Al primo avvio `llm-init` scarica il modello configurato. Finchè il modello non è disponibile, alcune risposte possono fallire.
+
+```bash
+docker compose logs -f llm-init
+docker compose logs -f llm
+```
+
+### Il microfono non funziona su iPhone
+
+Usare l'URL HTTPS generato da `cloudflared`, non `http://localhost` e non un IP locale.
+
+```bash
+docker compose logs -f cloudflared
+```
+
+### Voglio pulire tutto
+
+Solo se si vuole cancellare anche dati e cache:
+
+```bash
+docker compose down -v
+```
+
+Questa operazione rimuove i volumi Docker e puo' richiedere un nuovo download/ingestion.
+
+## Limiti Noti
+
+- Il sistema non fornisce risultati live, medagliere live, parcheggi in tempo reale o disponibilità biglietti personali se non integrati con fonti esterne dedicate.
+- Le risposte dipendono dalla qualità e copertura della knowledge base indicizzata.
+- Il tunnel `trycloudflare.com` gratuito è temporaneo.
+- La pipeline multimodale prepara audio e immagini per il backend, ma accuratezza ASR/OCR/vision dipende dai moduli configurati.
+- Il progetto non va considerato pronto per produzione senza hardening di sicurezza, autenticazione, rate limit, logging strutturato e monitoraggio.
