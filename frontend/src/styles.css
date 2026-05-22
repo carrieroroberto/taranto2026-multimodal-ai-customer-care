@@ -726,18 +726,21 @@
   }
 
   .source-favicons {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    margin-top: 0.7rem;
+    vertical-align: -0.25rem;
+    white-space: nowrap;
   }
 
   .source-favicon-link {
     display: inline-flex;
     width: 1.6rem;
     height: 1.6rem;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
+    padding: 0;
     border: 1px solid var(--assistant-bubble-border);
     border-radius: 999px;
     background: var(--composer-shell-bg);
@@ -752,9 +755,12 @@
   }
 
   .source-favicon-link img {
+    display: block;
     width: 1rem;
     height: 1rem;
     border-radius: 4px;
+    object-fit: contain;
+    object-position: center;
   }
 
   .audio-waveform {

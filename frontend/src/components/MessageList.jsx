@@ -62,7 +62,12 @@ function ChatMessage({ message, theme, t }) {
               <AudioWaveform audio={message.audio} label={t.audioMessage} />
             ) : null}
             {message.text}
-            {sources.length ? <SourceFavicons sources={sources} /> : null}
+            {sources.length ? (
+              <>
+                {" "}
+                <SourceFavicons sources={sources} />
+              </>
+            ) : null}
           </>
         )}
       </div>
@@ -72,7 +77,7 @@ function ChatMessage({ message, theme, t }) {
 
 function SourceFavicons({ sources }) {
   return (
-    <div className="source-favicons" aria-label="Sorgenti consultate">
+    <span className="source-favicons" aria-label="Sorgenti consultate">
       {sources.map((source, index) => (
         <a
           key={`${source.url}-${index}`}
@@ -93,7 +98,7 @@ function SourceFavicons({ sources }) {
           />
         </a>
       ))}
-    </div>
+    </span>
   );
 }
 
