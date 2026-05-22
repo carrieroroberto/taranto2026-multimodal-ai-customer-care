@@ -63,10 +63,7 @@ function ChatMessage({ message, theme, t }) {
             ) : null}
             {message.text}
             {sources.length ? (
-              <>
-                {" "}
-                <SourceFavicons sources={sources} />
-              </>
+              <SourceFavicons sources={sources} />
             ) : null}
           </>
         )}
