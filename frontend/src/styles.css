@@ -799,6 +799,10 @@
     max-width: 100%;
   }
 
+  .chat-turn-user .chat-message-stack {
+    align-items: flex-end;
+  }
+
   .chat-bubble {
     @apply min-w-0 rounded-3xl border px-4 py-3 text-[15px] leading-6;
     box-sizing: border-box;

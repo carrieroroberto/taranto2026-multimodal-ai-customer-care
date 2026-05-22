@@ -17,3 +17,5 @@ dist/
 .aider*
 agent.md
 BACKEND_HANDOFF.md
+run.bat
+TODO.md
