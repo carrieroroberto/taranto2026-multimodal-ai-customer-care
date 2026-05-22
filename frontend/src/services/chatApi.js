@@ -1,6 +1,6 @@
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
-export async function sendChatMessage({ message, sessionId, signal }) {
+export async function sendChatMessage({ message, sessionId, language, signal }) {
   const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/chat`, {
     method: "POST",
     headers: {
@@ -9,6 +9,7 @@ export async function sendChatMessage({ message, sessionId, signal }) {
     body: JSON.stringify({
       message,
       session_id: sessionId,
+      language,
     }),
     timeoutMs: 180000,
     signal,
@@ -23,7 +24,7 @@ export async function sendChatMessage({ message, sessionId, signal }) {
   return payload;
 }
 
-export async function sendMultimodalMessage({ file, message, sessionId, signal }) {
+export async function sendMultimodalMessage({ file, message, sessionId, language, signal }) {
   const formData = new FormData();
   formData.append("file", file);
   if (message) {
@@ -31,6 +32,9 @@ export async function sendMultimodalMessage({ file, message, sessionId, signal }
   }
   if (sessionId) {
     formData.append("session_id", sessionId);
+  }
+  if (language) {
+    formData.append("language", language);
   }
 
   const endpoint = file.type.startsWith("audio/")

@@ -1,36 +1,63 @@
 import { useEffect, useRef, useState } from "react";
 
 import { chatBotUrl, chatUserDarkUrl, chatUserUrl } from "../assets/index.js";
+import { ImageLightbox } from "./ImageLightbox.jsx";
 
-export function MessageList({ messages, listRef, mobileActionSlot, theme, t }) {
+const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
+
+export function MessageList({
+  messages,
+  listRef,
+  mobileActionSlot,
+  theme,
+  t,
+  onContentLoad,
+}) {
+  const [previewImage, setPreviewImage] = useState(null);
+
   return (
-    <div
-      ref={listRef}
-      id="messageList"
-      className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
-    >
-      <div aria-live="polite">
-        {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} theme={theme} t={t} />
-        ))}
+    <>
+      <div
+        ref={listRef}
+        id="messageList"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
+      >
+        <div aria-live="polite">
+          {messages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              theme={theme}
+              t={t}
+              onImageOpen={setPreviewImage}
+              onContentLoad={onContentLoad}
+            />
+          ))}
+        </div>
+        {mobileActionSlot}
       </div>
-      {mobileActionSlot}
-    </div>
+      <ImageLightbox
+        closeLabel={t.closeImage}
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
+    </>
   );
 }
 
-function ChatMessage({ message, theme, t }) {
+function ChatMessage({ message, theme, t, onImageOpen, onContentLoad }) {
   const isUser = message.role === "user";
   const userAvatarUrl = theme === "dark" ? chatUserDarkUrl : chatUserUrl;
+  const sources = getVisibleSources(message, isUser);
   const turnClassName = isUser ? "chat-turn chat-turn-user" : "chat-turn";
   const avatarClassName = isUser
     ? "chat-avatar chat-avatar-user"
     : "chat-avatar chat-avatar-assistant";
   const bubbleClassName = isUser
-    ? "chat-bubble chat-bubble-user"
+    ? `chat-bubble chat-bubble-user${message.image ? " chat-bubble-image" : ""}`
     : message.isError
       ? "chat-bubble chat-bubble-error"
-      : "chat-bubble chat-bubble-assistant";
+      : `chat-bubble chat-bubble-assistant${sources.length ? " chat-bubble-with-sources" : ""}`;
 
   return (
     <article className={turnClassName}>
@@ -48,22 +75,144 @@ function ChatMessage({ message, theme, t }) {
         ) : (
           <>
             {message.image ? (
-              <img
-                className="message-image-preview"
-                src={message.image}
-                alt=""
-                aria-hidden="true"
-              />
+              <button
+                className="message-image-button"
+                type="button"
+                aria-label="Apri immagine"
+                onClick={() => onImageOpen(message.image)}
+              >
+                <img
+                  className="message-image-preview"
+                  src={message.image}
+                  alt=""
+                  aria-hidden="true"
+                  onLoad={onContentLoad}
+                />
+              </button>
             ) : null}
             {message.audio ? (
               <AudioWaveform audio={message.audio} label={t.audioMessage} />
             ) : null}
-            {message.text}
+            {message.text && sources.length ? (
+              <TextWithInlineSources
+                className={
+                  message.image ? "message-text message-text-under-media" : ""
+                }
+                sources={sources}
+                text={message.text}
+              />
+            ) : message.text ? (
+              <span
+                className={
+                  message.image ? "message-text message-text-under-media" : ""
+                }
+              >
+                {message.text}
+              </span>
+            ) : null}
           </>
         )}
       </div>
     </article>
   );
+}
+
+function TextWithInlineSources({ className, sources, text }) {
+  const match = text.match(/(\S+)(\s*)$/);
+
+  if (!match) {
+    return (
+      <span className={className}>
+        <span className="message-inline-tail">
+          <SourceFavicons sources={sources} />
+        </span>
+      </span>
+    );
+  }
+
+  const lastWord = match[1];
+  const trailingWhitespace = match[2];
+  const prefix = text.slice(
+    0,
+    text.length - lastWord.length - trailingWhitespace.length,
+  );
+
+  return (
+    <span className={className}>
+      {prefix}
+      <span className="message-inline-tail">
+        {lastWord}
+        {trailingWhitespace}
+        <SourceFavicons sources={sources} />
+      </span>
+    </span>
+  );
+}
+
+function SourceFavicons({ sources }) {
+  return (
+    <span className="source-favicons" aria-label="Sorgenti consultate">
+      {sources.map((source, index) => (
+        <span key={`${source.url}-${index}`} className="source-favicon-group">
+          <a
+            className="source-favicon-link"
+            href={source.url}
+            target="_blank"
+            rel="noreferrer"
+            title={source.title || source.url}
+          >
+            <img
+              src={getFaviconUrl(source.url)}
+              alt=""
+              aria-hidden="true"
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = FALLBACK_SOURCE_ICON;
+              }}
+            />
+          </a>
+          {source.maps_url && (
+            <a
+              className="source-maps-link"
+              href={source.maps_url}
+              target="_blank"
+              rel="noreferrer"
+              title="Apri in Google Maps"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+              </svg>
+            </a>
+          )}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function getVisibleSources(message, isUser) {
+  if (
+    isUser ||
+    message.isError ||
+    message.isLoading ||
+    message.translationKey ||
+    !Array.isArray(message.sources)
+  ) {
+    return [];
+  }
+
+  return message.sources
+    .filter((source) => typeof source?.url === "string" && source.url.trim())
+    .slice(0, 3);
+}
+
+function getFaviconUrl(url) {
+  try {
+    const domain = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  } catch {
+    return FALLBACK_SOURCE_ICON;
+  }
 }
 
 function AudioWaveform({ audio, label }) {

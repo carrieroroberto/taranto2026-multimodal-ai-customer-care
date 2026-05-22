@@ -60,12 +60,39 @@ export function ChatPage() {
   }, [locale, localeConfig.dir, localeConfig.htmlLang, t.pageTitle]);
 
   useEffect(() => {
-    const messageListElement = messageListRef.current;
-    messageListElement?.scrollTo({
-      top: messageListElement.scrollHeight,
-      behavior: "smooth",
+    let secondFrameId = null;
+
+    const firstFrameId = window.requestAnimationFrame(() => {
+      scrollMessagesToBottom("smooth");
+      secondFrameId = window.requestAnimationFrame(() => {
+        scrollMessagesToBottom("smooth");
+      });
     });
+
+    const fallbackTimeoutId = window.setTimeout(() => {
+      scrollMessagesToBottom("smooth");
+    }, 120);
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+      window.clearTimeout(fallbackTimeoutId);
+    };
   }, [messages]);
+
+  function scrollMessagesToBottom(behavior = "smooth") {
+    const messageListElement = messageListRef.current;
+    if (!messageListElement) {
+      return;
+    }
+
+    messageListElement.scrollTo({
+      top: messageListElement.scrollHeight,
+      behavior,
+    });
+  }
 
   function handleStop() {
     if (abortControllerRef.current) {
@@ -79,7 +106,12 @@ export function ChatPage() {
         if (lastMessage?.role === "assistant" && lastMessage.isLoading) {
           return [
             ...currentMessages.slice(0, -1),
-            { ...lastMessage, text: "Richiesta interrotta.", isLoading: false, isError: true }
+            {
+              ...lastMessage,
+              text: t.stoppedResponse,
+              isLoading: false,
+              isError: true,
+            },
           ];
         }
         return currentMessages;
@@ -109,11 +141,13 @@ export function ChatPage() {
       const response = await sendChatMessage({
         message,
         sessionId: sessionIdRef.current,
+        language: locale,
         signal: controller.signal
       });
 
       patchMessage(pendingMessage.id, {
         text: response.answer || t.unavailableAnswer,
+        sources: normalizeSources(response.sources),
         isLoading: false,
       });
     } catch (error) {
@@ -175,25 +209,13 @@ export function ChatPage() {
         file,
         message: isImage ? trimmedMessage : undefined,
         sessionId: sessionIdRef.current,
+        language: locale,
         signal: controller.signal
       });
 
-      // Update user message with extracted text if available
-      if (response.extracted_text) {
-        setMessages(currentMessages => currentMessages.map(msg => 
-          msg.id === userMessage.id 
-            ? {
-                ...msg,
-                text: isImage
-                  ? `${msg.text}\n\n"${response.extracted_text}"`
-                  : `"${response.extracted_text}"`,
-              }
-            : msg
-        ));
-      }
-
       patchMessage(pendingMessage.id, {
         text: response.answer || t.unavailableAnswer,
+        sources: normalizeSources(response.sources),
         isLoading: false,
       });
     } catch (error) {
@@ -269,6 +291,7 @@ export function ChatPage() {
               }
               theme={theme}
               t={t}
+              onContentLoad={() => scrollMessagesToBottom("smooth")}
             />
             <ChatComposer
               isSending={isSending}
@@ -309,4 +332,14 @@ function createMessage(role, text, isLoading = false) {
     isLoading,
     isError: false,
   };
+}
+
+function normalizeSources(sources) {
+  if (!Array.isArray(sources)) {
+    return [];
+  }
+
+  return sources
+    .filter((source) => typeof source?.url === "string" && source.url.trim())
+    .slice(0, 3);
 }

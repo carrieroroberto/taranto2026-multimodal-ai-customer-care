@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 KB_TOTAL_RECORDS = 2557
 TICKETING_RECORD_ID = "ticketing_general_taranto_2026"
 FILTERED_RETRIEVAL_MIN_RESULTS = 3
-MAX_ANSWER_CONTEXTS = 5
+MAX_ANSWER_CONTEXTS = 8
 
 _KB_READY = False
 _KB_STATUS = "not_started"
@@ -684,5 +684,8 @@ def as_optional_float(value: Any) -> float | None:
 
 
 def google_maps_url(latitude: float, longitude: float) -> str:
-    query = quote(f"{latitude},{longitude}")
+    # Round to 5 decimal places to normalize slightly different coordinates for same venue
+    lat = round(latitude, 5)
+    lon = round(longitude, 5)
+    query = quote(f"{lat},{lon}")
     return f"https://www.google.com/maps/search/?api=1&query={query}"

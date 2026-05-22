@@ -6,12 +6,16 @@ from backend.app.schemas.ticket import TicketDraftDTO
 class ChatRequestDTO(BaseModel):
     message: str = Field(..., min_length=1)
     session_id: str | None = None
+    visual_context: str | None = None
+    planning_message: str | None = None
+    language: str | None = None
 
 
 class SourceDTO(BaseModel):
     title: str | None = None
     url: str | None = None
     type: str | None = None
+    maps_url: str | None = None
 
 
 class ChatResponseDTO(BaseModel):

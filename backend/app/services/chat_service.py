@@ -56,14 +56,112 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
     # Load history
     history = get_session_history(session_id) if session_id else []
 
-    plan = build_query_plan(message, history)
+    planning_message = request.planning_message if request.planning_message else message
+    plan = build_query_plan(planning_message, history)
+    
+    if request.language:
+        import dataclasses
+        from backend.app.services.llm_service import normalize_language_code
+        plan = dataclasses.replace(plan, response_language=normalize_language_code(request.language))
+    
+    if request.visual_context:
+        import dataclasses
+        from backend.app.services.rag_service import PlannedRetrievalQuery
+        
+        anchored_context = f"{request.visual_context} Giochi del Mediterraneo Taranto 2026 logo emblema mascotte icmg"
+        
+        new_queries = list(plan.retrieval_queries) + [
+            PlannedRetrievalQuery(query=anchored_context, domain="general", weight=1.5),
+            PlannedRetrievalQuery(query=request.visual_context, domain="general", weight=1.0)
+        ]
+        new_expanded = list(plan.expanded_queries) + [request.visual_context, anchored_context]
+        plan = dataclasses.replace(plan, retrieval_queries=new_queries, expanded_queries=new_expanded)
+
     candidates = retrieve_context(plan, settings.n_results)
     answer_candidates = select_answer_candidates(candidates, plan)
     contexts = [to_context(candidate) for candidate in answer_candidates]
-    sources = build_sources(contexts, plan)
-    maps = build_map_link(contexts, plan)
+    
     should_escalate, reason = escalation_decision(plan, contexts, candidates)
     answer = build_answer(message, plan, contexts, should_escalate, reason, history)
+
+    # The LLM can signal that the context was irrelevant by adding [NO_CONTEXT]
+    llm_flagged_no_context = "[no_context]" in answer.upper() or "[NO_CONTEXT]" in answer
+    if llm_flagged_no_context:
+        answer = answer.replace("[NO_CONTEXT]", "").replace("[no_context]", "").strip()
+
+    # Only provide sources if we actually have context AND the answer is not a refusal/fallback.
+    normalized_answer = normalize_text(answer)
+    refusal_keywords = [
+        "informazioni sufficienti", 
+        "dato abbastanza preciso", 
+        "non ho informazioni", 
+        "non risultano ancora disponibili",
+        "non sono ancora pubblicati",
+        "non dispongo di informazioni",
+        "i don't have enough information",
+        "non ho un dato",
+        "domanda non e specifica",
+        "indica cosa desideri sapere",
+        "per favore specifica",
+        "non posso rispondere",
+        "non ho dettagli",
+        "servizio e riservato a comunicazioni civili",
+        "posso rispondere solo a domande riguardanti i giochi"
+    ]
+    is_refusal = llm_flagged_no_context or any(kw in normalized_answer for kw in refusal_keywords)
+    
+    sources = []
+    if contexts and not is_refusal:
+        sources = build_sources(contexts, plan)
+    
+    # Logic for Maps based on what is ACTUALLY mentioned in the answer text:
+    mentioned_maps = []
+    norm_ans = normalize_text(answer)
+    
+    for c in contexts:
+        if not c.maps_url:
+            continue
+            
+        title = normalize_text(c.title or "")
+        # Clean title: take first part and remove "taranto" suffix if present
+        clean_title = title.split(" taranto")[0].strip()
+        significant_words = [w for w in clean_title.split() if len(w) > 3]
+        
+        is_mentioned = False
+        if clean_title and clean_title in norm_ans:
+            is_mentioned = True
+        elif significant_words and all(w in norm_ans for w in significant_words):
+            is_mentioned = True
+        elif c.address and normalize_text(c.address) in norm_ans:
+            is_mentioned = True
+            
+        if is_mentioned:
+            if c.maps_url not in mentioned_maps:
+                mentioned_maps.append(c.maps_url)
+    
+    if len(mentioned_maps) == 1:
+        # Exactly one location mentioned
+        maps = mentioned_maps[0]
+        # Show icon ONLY on the first source that matches this location
+        icon_shown = False
+        for s in sources:
+            if s.maps_url == maps and not icon_shown:
+                icon_shown = True
+            else:
+                s.maps_url = None
+    elif len(mentioned_maps) > 1:
+        # Multiple locations mentioned: hide all icons and add suffix
+        for s in sources:
+            s.maps_url = None
+        maps = None
+        suffix = " Vuoi sapere la posizione di un posto specifico tra questi?"
+        if suffix not in answer:
+            answer = f"{answer.rstrip()} {suffix}".strip()
+    else:
+        # No locations mentioned
+        for s in sources:
+            s.maps_url = None
+        maps = None
 
     latency_ms = (time.perf_counter() - started_at) * 1000
     
@@ -120,6 +218,8 @@ def build_sources(
     contexts: list[RetrievedContext],
     plan: QueryPlan,
 ) -> list[SourceDTO]:
+    from urllib.parse import urlparse
+    
     selected_contexts = sorted(
         select_source_contexts(contexts, plan),
         key=lambda context: 0
@@ -127,19 +227,25 @@ def build_sources(
         else 1,
     )
     sources: list[SourceDTO] = []
-    seen: set[str] = set()
+    seen_domains: set[str] = set()
 
     for context in selected_contexts:
-        if not context.source_url or context.source_url in seen:
+        if not context.source_url:
             continue
+            
+        domain = urlparse(context.source_url).netloc.lower()
+        if not domain or domain in seen_domains:
+            continue
+            
         sources.append(
             SourceDTO(
                 title=context.title,
                 url=context.source_url,
                 type=context.item_type,
+                maps_url=context.maps_url,
             )
         )
-        seen.add(context.source_url)
+        seen_domains.add(domain)
         if len(sources) == 3:
             break
     return sources
