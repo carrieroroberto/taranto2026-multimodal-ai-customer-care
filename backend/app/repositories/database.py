@@ -39,6 +39,25 @@ SCHEMA_STATEMENTS = (
     );
     """,
     """
+    UPDATE messages
+    SET satisfaction = NULL
+    WHERE role = 'user' AND satisfaction IS NOT NULL;
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'messages_user_satisfaction_null'
+        ) THEN
+            ALTER TABLE messages
+            ADD CONSTRAINT messages_user_satisfaction_null
+            CHECK (role = 'bot' OR satisfaction IS NULL);
+        END IF;
+    END $$;
+    """,
+    """
     CREATE TABLE IF NOT EXISTS tickets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,

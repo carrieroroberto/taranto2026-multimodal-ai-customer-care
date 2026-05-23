@@ -166,6 +166,7 @@ function MessageFeedback({ message, t, onFeedback }) {
             : "message-feedback-button"
         }
         type="button"
+        aria-pressed={message.satisfaction === true}
         aria-label={t.feedbackPositive}
         title={t.feedbackPositive}
         onClick={() => onFeedback?.(message, true)}
@@ -181,6 +182,7 @@ function MessageFeedback({ message, t, onFeedback }) {
             : "message-feedback-button"
         }
         type="button"
+        aria-pressed={message.satisfaction === false}
         aria-label={t.feedbackNegative}
         title={t.feedbackNegative}
         onClick={() => onFeedback?.(message, false)}
