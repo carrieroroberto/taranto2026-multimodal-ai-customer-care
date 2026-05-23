@@ -142,6 +142,8 @@ Variabili principali:
 | `PGADMIN_DEFAULT_EMAIL` | Email di login pgAdmin |
 | `PGADMIN_DEFAULT_PASSWORD` | Password di login pgAdmin |
 | `PGADMIN_HOST_PORT` | Porta host pgAdmin, di default `5050` |
+| `DEFAULT_OPERATOR_EMAIL` | Operatore demo creato automaticamente |
+| `DEFAULT_OPERATOR_PASSWORD` | Password demo hashata nel DB |
 | `EMBEDDING_MODEL` | Modello embedding |
 | `N_RESULTS` | Numero base di risultati recuperati |
 | `OLLAMA_MODEL` | Modello usato dal backend |
@@ -265,6 +267,7 @@ La risposta include anche gli identificativi persistiti:
 - `bot_message_id`
 
 Questi ID collegano ogni turno della chat alle tabelle `conversations` e `messages`.
+Ogni riga in `messages` contiene anche `type`, valorizzato con `text`, `image` o `audio`.
 
 ### Conversazioni
 
@@ -318,6 +321,13 @@ Content-Type: application/json
 
 Il ticket viene salvato in Postgres nella tabella `tickets` e collegato alla conversazione.
 
+Operatore demo creato automaticamente:
+
+- Email: `operatore@tarai.it`
+- Password: `OperatoreTaranto2026!`
+
+La password viene salvata nella tabella `operators` come hash generato da `pgcrypto`; non viene salvata in chiaro. Non e' prevista registrazione pubblica di nuovi operatori.
+
 ### KPI
 
 ```http
@@ -333,6 +343,7 @@ POST /api/feedback
 ```
 
 Il feedback aggiorna `messages.satisfaction` sul messaggio bot selezionato: `true` per pollice su, `false` per pollice giu'. Il valore iniziale nel database resta `NULL`.
+Per vincolo DB, `satisfaction` puo' essere valorizzato solo su righe `role = 'bot'`; sui messaggi utente resta sempre `NULL`.
 
 ## Sviluppo Frontend
 

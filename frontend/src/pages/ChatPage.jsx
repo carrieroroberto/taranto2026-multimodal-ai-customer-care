@@ -275,8 +275,10 @@ export function ChatPage() {
       isImage ? trimmedMessage : ""
     );
     if (isImage) {
+      userMessage.messageType = "image";
       userMessage.image = objectUrl;
     } else {
+      userMessage.messageType = "audio";
       userMessage.audio = {
         url: objectUrl,
         durationMs: metadata.durationMs || 0,
@@ -454,6 +456,7 @@ function createMessage(role, text, isLoading = false) {
     text,
     persistedId: null,
     conversationId: null,
+    messageType: "text",
     satisfaction: null,
     isLoading,
     isError: false,
@@ -467,6 +470,7 @@ function mapPersistedMessage(message) {
     conversationId: message.conversation_id,
     role: message.role === "bot" ? "assistant" : "user",
     text: message.content,
+    messageType: message.type || "text",
     satisfaction: message.satisfaction ?? null,
     isLoading: false,
     isError: false,

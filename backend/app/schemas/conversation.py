@@ -16,6 +16,7 @@ class PersistedMessageDTO(BaseModel):
     id: str
     conversation_id: str
     role: str
+    type: str = "text"
     content: str
     satisfaction: bool | None = None
     created_at: datetime

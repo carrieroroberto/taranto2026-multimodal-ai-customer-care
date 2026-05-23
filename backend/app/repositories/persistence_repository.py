@@ -35,9 +35,19 @@ def ensure_conversation(
     return str(resolved_id)
 
 
-def save_message(session_id: str, role: str, content: str) -> dict[str, Any]:
+VALID_MESSAGE_TYPES = {"text", "image", "audio"}
+
+
+def save_message(
+    session_id: str,
+    role: str,
+    content: str,
+    message_type: str = "text",
+) -> dict[str, Any]:
     if role not in {"user", "bot"}:
         raise ValueError("role must be 'user' or 'bot'.")
+    if message_type not in VALID_MESSAGE_TYPES:
+        message_type = "text"
 
     resolved_id = conversation_uuid(session_id)
     with connect() as conn:
@@ -52,23 +62,27 @@ def save_message(session_id: str, role: str, content: str) -> dict[str, Any]:
             )
             cursor.execute(
                 """
-                INSERT INTO messages (conversation_id, role, content, created_at)
-                VALUES (%s, %s, %s, clock_timestamp())
-                RETURNING id, conversation_id, role, content, satisfaction, created_at
+                INSERT INTO messages (conversation_id, role, type, content, created_at)
+                VALUES (%s, %s, %s, %s, clock_timestamp())
+                RETURNING id, conversation_id, role, type, content, satisfaction, created_at
                 """,
-                (resolved_id, role, content),
+                (resolved_id, role, message_type, content),
             )
             row = cursor.fetchone()
 
     return stringify_ids(dict(row))
 
 
-def save_user_message(session_id: str, content: str) -> dict[str, Any]:
-    return save_message(session_id, "user", content)
+def save_user_message(
+    session_id: str,
+    content: str,
+    message_type: str = "text",
+) -> dict[str, Any]:
+    return save_message(session_id, "user", content, message_type)
 
 
 def save_bot_message(session_id: str, content: str) -> dict[str, Any]:
-    return save_message(session_id, "bot", content)
+    return save_message(session_id, "bot", content, "text")
 
 
 def save_interaction(session_id: str, interaction: dict[str, Any]) -> None:
@@ -91,7 +105,7 @@ def get_conversation_messages(session_id: str) -> list[dict[str, Any]]:
     resolved_id = conversation_uuid(session_id)
     rows = fetch_all(
         """
-        SELECT id, conversation_id, role, content, satisfaction, created_at
+        SELECT id, conversation_id, role, type, content, satisfaction, created_at
         FROM messages
         WHERE conversation_id = %s
         ORDER BY created_at ASC

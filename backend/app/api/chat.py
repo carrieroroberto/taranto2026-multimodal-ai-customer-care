@@ -32,7 +32,15 @@ async def chat_audio_endpoint(
     if not extracted_text:
         extracted_text = "[AUDIO_INCOMPRENSIBILE]"
 
-    response = answer_chat(ChatRequestDTO(message=extracted_text, session_id=session_id, language=language))
+    response = answer_chat(
+        ChatRequestDTO(
+            message=extracted_text,
+            session_id=session_id,
+            language=language,
+            message_type="audio",
+            stored_user_content=extracted_text,
+        )
+    )
     response.extracted_text = extracted_text if extracted_text != "[AUDIO_INCOMPRENSIBILE]" else None
     return response
 
@@ -54,7 +62,21 @@ async def chat_multimodal_endpoint(
         if user_message:
             raise HTTPException(status_code=400, detail="Audio messages cannot be combined with text.")
         extracted_text = await transcribe_audio(file)
-        final_message = extracted_text
+        if not extracted_text:
+            extracted_text = "[AUDIO_INCOMPRENSIBILE]"
+        response = answer_chat(
+            ChatRequestDTO(
+                message=extracted_text,
+                session_id=session_id,
+                language=language,
+                message_type="audio",
+                stored_user_content=extracted_text,
+            )
+        )
+        response.extracted_text = (
+            extracted_text if extracted_text != "[AUDIO_INCOMPRENSIBILE]" else None
+        )
+        return response
     elif content_type.startswith("image/"):
         # Combine OCR (text) and Vision (description)
         extracted_text = await extract_text_from_image(file)
@@ -79,15 +101,43 @@ async def chat_multimodal_endpoint(
             final_message = f"{final_message}\n\nAnalisi immagine:\n" + "\n".join(analysis_parts)
             
         planning_message = user_message or "Cosa vedi in questa immagine?"
+        stored_user_content = build_image_message_content(
+            user_message,
+            extracted_text,
+            visual_description,
+        )
         request = ChatRequestDTO(
             message=final_message, 
             visual_context=visual_context or None, 
             planning_message=planning_message,
             session_id=session_id,
-            language=language
+            language=language,
+            message_type="image",
+            stored_user_content=stored_user_content,
         )
         response = answer_chat(request)
         
         # Set the extracted text so the frontend can display what it heard/read
         response.extracted_text = extracted_text or visual_description or None
         return response
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type.")
+
+
+def build_image_message_content(
+    user_message: str,
+    extracted_text: str,
+    visual_description: str,
+) -> str:
+    parts = []
+    if user_message:
+        parts.append(user_message)
+    else:
+        parts.append("Immagine inviata dall'utente.")
+
+    if visual_description:
+        parts.append(f"Descrizione immagine: {visual_description}")
+    if extracted_text:
+        parts.append(f"Testo estratto dall'immagine: {extracted_text}")
+
+    return "\n".join(parts)

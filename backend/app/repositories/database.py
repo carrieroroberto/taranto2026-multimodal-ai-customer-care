@@ -33,10 +33,34 @@ SCHEMA_STATEMENTS = (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
         role TEXT NOT NULL CHECK (role IN ('user', 'bot')),
+        type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio')),
         content TEXT NOT NULL,
         satisfaction BOOLEAN DEFAULT NULL,
         created_at TIMESTAMP DEFAULT NOW()
     );
+    """,
+    """
+    ALTER TABLE messages
+    ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text';
+    """,
+    """
+    UPDATE messages
+    SET type = 'text'
+    WHERE type IS NULL OR type NOT IN ('text', 'image', 'audio');
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'messages_type_valid'
+        ) THEN
+            ALTER TABLE messages
+            ADD CONSTRAINT messages_type_valid
+            CHECK (type IN ('text', 'image', 'audio'));
+        END IF;
+    END $$;
     """,
     """
     UPDATE messages
@@ -87,6 +111,7 @@ def init_database(max_attempts: int = 30, delay_seconds: float = 1.0) -> None:
                 with conn.cursor() as cursor:
                     for statement in SCHEMA_STATEMENTS:
                         cursor.execute(statement)
+                    seed_default_operator(cursor)
             logger.info("database initialized")
             return
         except psycopg.Error as exc:
@@ -100,6 +125,22 @@ def init_database(max_attempts: int = 30, delay_seconds: float = 1.0) -> None:
             time.sleep(delay_seconds)
 
     raise RuntimeError("Database initialization failed.") from last_error
+
+
+def seed_default_operator(cursor: psycopg.Cursor) -> None:
+    email = settings.default_operator_email.strip().lower()
+    password = settings.default_operator_password
+    if not email or not password:
+        return
+
+    cursor.execute(
+        """
+        INSERT INTO operators (email, password_hash)
+        VALUES (%s, crypt(%s, gen_salt('bf')))
+        ON CONFLICT (email) DO NOTHING
+        """,
+        (email, password),
+    )
 
 
 def fetch_one(query: str, params: Iterable[Any] | None = None) -> dict[str, Any] | None:

@@ -62,7 +62,11 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
 
     # Load history
     history = get_session_history(session_id)
-    user_message_row = save_user_message(session_id, message)
+    user_message_row = save_user_message(
+        session_id,
+        request.stored_user_content or message,
+        request.message_type,
+    )
 
     planning_message = request.planning_message if request.planning_message else message
     plan = build_query_plan(planning_message, history)

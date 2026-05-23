@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from backend.app.schemas.ticket import TicketDraftDTO
@@ -9,6 +11,8 @@ class ChatRequestDTO(BaseModel):
     visual_context: str | None = None
     planning_message: str | None = None
     language: str | None = None
+    message_type: Literal["text", "image", "audio"] = "text"
+    stored_user_content: str | None = None
 
 
 class SourceDTO(BaseModel):
