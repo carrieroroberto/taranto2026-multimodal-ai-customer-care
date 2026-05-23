@@ -1,4 +1,4 @@
-name: app
+name: tarai
 
 services:
   vector-db:
@@ -20,14 +20,14 @@ services:
     volumes:
       - database_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-app}
-      POSTGRES_USER: ${POSTGRES_USER:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-tarai}
+      POSTGRES_USER: ${POSTGRES_USER:-tarai}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-ChatbotTaranto2026!}"
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U $${POSTGRES_USER:-app} -d $${POSTGRES_DB:-app}",
+          "pg_isready -U $${POSTGRES_USER:-tarai} -d $${POSTGRES_DB:-tarai}",
         ]
       interval: 10s
       timeout: 5s
@@ -42,8 +42,8 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin123}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@tarai.com}
+      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_DEFAULT_PASSWORD:-ChatbotTaranto2026!}"
       PGADMIN_CONFIG_SERVER_MODE: "False"
     depends_on:
       database:
@@ -125,7 +125,8 @@ services:
       USE_LLM_QUERY_PARSER: ${USE_LLM_QUERY_PARSER:-true}
       QUERY_PARSER_TIMEOUT_SECONDS: ${QUERY_PARSER_TIMEOUT_SECONDS:-150}
       QUERY_PARSER_NUM_PREDICT: ${QUERY_PARSER_NUM_PREDICT:-420}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}
+      AI_DISABLED: ${AI_DISABLED:-false}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-tarai}:${POSTGRES_PASSWORD:-ChatbotTaranto2026!}@database:5432/${POSTGRES_DB:-tarai}"
       HF_HOME: /models/huggingface
       PYTHONPATH: /app
     command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
@@ -190,4 +191,4 @@ volumes:
 
 networks:
   default:
-    name: app_network
+    name: tarai_network

@@ -68,6 +68,22 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
         request.message_type,
     )
 
+    if settings.ai_disabled:
+        answer = ai_disabled_answer(request.language)
+        bot_message_row = save_bot_message(session_id, answer)
+        return ChatResponseDTO(
+            session_id=session_id,
+            conversation_id=conversation_id,
+            user_message_id=user_message_row["id"],
+            bot_message_id=bot_message_row["id"],
+            answer=answer,
+            sources=[],
+            maps=None,
+            should_escalate=False,
+            reason="ai_disabled",
+            ticket_draft=None,
+        )
+
     planning_message = request.planning_message if request.planning_message else message
     plan = build_query_plan(planning_message, history)
     
@@ -220,6 +236,20 @@ def normalize_required_message(value: str) -> str:
 
         raise ValidationServiceError("Message cannot be empty.")
     return message
+
+
+def ai_disabled_answer(language: str | None) -> str:
+    match (language or "it").lower():
+        case "en":
+            return "AI models are disabled in this local demo mode. I saved your message, but I cannot generate a grounded answer right now."
+        case "es":
+            return "Los modelos de IA están desactivados en este modo local de demostración. He guardado tu mensaje, pero ahora no puedo generar una respuesta fundamentada."
+        case "fr":
+            return "Les modèles d'IA sont désactivés dans ce mode local de démonstration. J'ai enregistré votre message, mais je ne peux pas générer une réponse fiable pour le moment."
+        case "ar":
+            return "نماذج الذكاء الاصطناعي معطلة في وضع العرض المحلي. تم حفظ رسالتك، لكن لا يمكنني إنشاء إجابة موثوقة الآن."
+        case _:
+            return "I modelli AI sono disattivati in questa modalità demo locale. Ho salvato il tuo messaggio, ma al momento non posso generare una risposta grounded."
 
 
 def build_sources(

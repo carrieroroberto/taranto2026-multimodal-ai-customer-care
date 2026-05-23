@@ -62,6 +62,11 @@ class Settings:
         "USE_LLM_QUERY_PARSER",
         "true",
     ).lower() in {"1", "true", "yes"}
+    ai_disabled: bool = os.getenv("AI_DISABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     query_parser_timeout_seconds: int = int(
         os.getenv("QUERY_PARSER_TIMEOUT_SECONDS", "150")
     )

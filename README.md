@@ -149,12 +149,37 @@ Variabili principali:
 | `OLLAMA_MODEL` | Modello usato dal backend |
 | `QUERY_PARSER_MODEL` | Modello usato dal query planner |
 | `USE_LLM_QUERY_PARSER` | Abilita il planner LLM |
+| `AI_DISABLED` | Disattiva i modelli AI e usa una risposta demo salvando comunque conversazioni e messaggi |
 | `VITE_API_BASE_URL` | Base API del frontend, di default `/api` |
 | `VITE_PROXY_TARGET` | Target proxy Vite verso il backend |
 
 Non inserire IP locali hardcoded nel frontend. Le chiamate devono passare da path relativi come `/api/chat`.
 
 ## Avvio Con Docker
+
+Il progetto Docker Compose usa il nome progetto `tarai`, quindi rete e risorse Compose vengono isolate sotto quel nome.
+
+Su Windows si puo' usare lo script rapido:
+
+```bat
+run.bat
+```
+
+Di default equivale a:
+
+```bat
+run.bat lite
+```
+
+La modalita' `lite` avvia frontend, backend, Postgres, pgAdmin, ChromaDB e tunnel Cloudflare, ma non avvia i servizi AI `llm` e `llm-init`. Il backend salva comunque conversazioni e messaggi nel database e risponde con un fallback demo.
+
+Per la versione completa con modelli AI locali:
+
+```bat
+run.bat full
+```
+
+La modalita' `full` avvia anche Ollama, verifica/scarica il modello configurato e abilita la pipeline RAG completa.
 
 Dalla root del progetto:
 
@@ -172,16 +197,16 @@ Aprire da PC:
 
 Accesso pgAdmin di sviluppo:
 
-- Email: `admin@example.com`
-- Password: `admin123`
+- Email: `admin@tarai.com`
+- Password: `ChatbotTaranto2026!`
 
 Per collegare il database in pgAdmin:
 
 - Host name/address: `database`
 - Port: `5432`
-- Maintenance database: `app`
-- Username: `app`
-- Password: `app`
+- Maintenance database: `tarai`
+- Username: `tarai`
+- Password: `ChatbotTaranto2026!`
 
 Se si accede a Postgres da strumenti installati sul PC, usare invece host `localhost` e porta `5433`.
 
