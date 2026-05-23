@@ -14,3 +14,8 @@ pytesseract==0.3.13
 Pillow==11.0.0
 python-multipart==0.0.19
 psycopg[binary]==3.2.3
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+
+

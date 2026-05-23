@@ -7,7 +7,9 @@ from backend.app.schemas.conversation import (
 )
 from backend.app.schemas.health import HealthResponseDTO
 from backend.app.schemas.kpi import KpiSummaryDTO
-from backend.app.schemas.ticket import TicketDraftDTO
+from backend.app.schemas.ticket import TicketDraftDTO, TicketRequestDTO
+from backend.app.schemas.feedback import FeedbackRequestDTO, MessageFeedbackPatchDTO
+from backend.app.schemas.operator import OperatorLoginRequestDTO, LoginResponseDTO, TicketStatusUpdateDTO
 
 __all__ = [
     "ChatRequestDTO",
@@ -20,4 +22,10 @@ __all__ = [
     "KpiSummaryDTO",
     "PersistedMessageDTO",
     "TicketDraftDTO",
+    "TicketRequestDTO",
+    "FeedbackRequestDTO",
+    "MessageFeedbackPatchDTO",
+    "OperatorLoginRequestDTO",
+    "LoginResponseDTO",
+    "TicketStatusUpdateDTO",
 ]

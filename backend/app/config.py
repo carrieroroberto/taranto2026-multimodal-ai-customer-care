@@ -31,6 +31,9 @@ class Settings:
         "DEFAULT_OPERATOR_PASSWORD",
         "OperatoreTaranto2026!",
     )
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "super-secret-key-for-tarai")
+    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
+    access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
     chroma_host: str = os.getenv("CHROMA_HOST", "localhost")
     chroma_port: int = int(os.getenv("CHROMA_PORT", "8001"))
     collection_name: str = os.getenv("COLLECTION_NAME", "taranto2026_kb")

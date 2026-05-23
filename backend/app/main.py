@@ -7,7 +7,10 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
 from backend.app.api.routes import router
+from backend.app.config import settings
 from backend.app.repositories.database import init_database
+from backend.app.repositories.persistence_repository import ensure_default_operator
+from backend.app.services.auth_service import get_password_hash
 from backend.app.services.errors import AppServiceError
 from backend.app.services.rag_service import start_knowledge_base_startup_task
 
@@ -18,6 +21,13 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_database()
+    
+    # Seed default operator
+    if settings.default_operator_email and settings.default_operator_password:
+        logger.info("Seeding default operator: %s", settings.default_operator_email)
+        hashed_password = get_password_hash(settings.default_operator_password)
+        ensure_default_operator(settings.default_operator_email, hashed_password)
+        
     start_knowledge_base_startup_task()
     yield
 

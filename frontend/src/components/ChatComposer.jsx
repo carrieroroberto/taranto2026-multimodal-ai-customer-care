@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from "react";
 
 import { ImageLightbox } from "./ImageLightbox.jsx";
 
-export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
+export function ChatComposer({
+  isSending,
+  t,
+  onSend,
+  onFileSend,
+  onStop,
+  isEscalating,
+  onCancelEscalation,
+}) {
   const [message, setMessage] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImagePreviewUrl, setSelectedImagePreviewUrl] = useState(null);
@@ -392,7 +400,7 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
           id="messageInput"
           className="message-textarea flex-1 resize-none border-0 bg-transparent px-3 py-3 text-base outline-none focus:ring-0"
           rows="1"
-          placeholder={t.messagePlaceholder}
+          placeholder={isEscalating ? t.ticketEmailPlaceholder : t.messagePlaceholder}
           required={!isRecording}
           disabled={isSending || isRecording}
           value={message}
@@ -401,56 +409,73 @@ export function ChatComposer({ isSending, t, onSend, onFileSend, onStop }) {
           onKeyDown={handleKeyDown}
         />
 
-        {shouldShowImageActionButton ? (
+        {isEscalating ? (
           <button
             type="button"
-            className={`composer-action-button composer-image-action ${
-              selectedImage
-                ? "composer-action-button-selected composer-image-action-selected"
-                : ""
-            }`}
-            onClick={handleImageClick}
-            disabled={isSending || isRecording}
-            title={selectedImage ? removeImageLabel : uploadImageLabel}
-            aria-label={selectedImage ? removeImageLabel : uploadImageLabel}
+            className="composer-action-button"
+            onClick={onCancelEscalation}
+            title={t.ticketCancel}
+            aria-label={t.ticketCancel}
           >
-            {selectedImage ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            )}
-          </button>
-        ) : null}
-
-        <button
-          type="button"
-          className={`composer-action-button ${
-            isRecording ? "composer-action-button-selected" : ""
-          }`}
-          onClick={toggleRecording}
-          disabled={isSending || (!isRecording && !canStartRecording)}
-          title={isRecording ? cancelRecordingLabel : recordAudioLabel}
-          aria-label={isRecording ? cancelRecordingLabel : recordAudioLabel}
-        >
-          {isRecording ? (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-              <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeJoin="round" />
             </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          )}
-        </button>
+          </button>
+        ) : (
+          <>
+            {shouldShowImageActionButton ? (
+              <button
+                type="button"
+                className={`composer-action-button composer-image-action ${
+                  selectedImage
+                    ? "composer-action-button-selected composer-image-action-selected"
+                    : ""
+                }`}
+                onClick={handleImageClick}
+                disabled={isSending || isRecording}
+                title={selectedImage ? removeImageLabel : uploadImageLabel}
+                aria-label={selectedImage ? removeImageLabel : uploadImageLabel}
+              >
+                {selectedImage ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                    <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                )}
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              className={`composer-action-button ${
+                isRecording ? "composer-action-button-selected" : ""
+              }`}
+              onClick={toggleRecording}
+              disabled={isSending || (!isRecording && !canStartRecording)}
+              title={isRecording ? cancelRecordingLabel : recordAudioLabel}
+              aria-label={isRecording ? cancelRecordingLabel : recordAudioLabel}
+            >
+              {isRecording ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                  <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              )}
+            </button>
+          </>
+        )}
+
         <button
           id="sendButton"
           className={`send-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-sky-700/20 ${

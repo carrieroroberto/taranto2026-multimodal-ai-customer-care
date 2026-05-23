@@ -92,9 +92,11 @@ SCHEMA_STATEMENTS = (
         summary TEXT NOT NULL,
         original_message TEXT NOT NULL,
         translated_message TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
     );
     """,
+    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();",
 )
 
 

@@ -6,3 +6,7 @@ class FeedbackRequestDTO(BaseModel):
     message_id: str | None = None  # Optional if we want to tie feedback to a specific message
     rating: int = Field(..., ge=1, le=5)  # 1-5 or maybe just 1/0 for thumbs up/down
     comment: str | None = None
+
+
+class MessageFeedbackPatchDTO(BaseModel):
+    satisfaction: bool | None

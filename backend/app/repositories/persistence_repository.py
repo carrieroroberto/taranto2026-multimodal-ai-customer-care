@@ -202,6 +202,119 @@ def save_feedback(feedback_data: dict[str, Any]) -> bool:
     return False
 
 
+def update_message_satisfaction(message_id: str, satisfaction: bool | None) -> dict[str, Any] | None:
+    try:
+        resolved_id = uuid.UUID(message_id)
+    except ValueError:
+        return None
+
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            # Check if exists and is bot
+            cursor.execute("SELECT role FROM messages WHERE id = %s", (resolved_id,))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            if row["role"] != "bot":
+                raise ValueError("Feedback allowed only on bot messages.")
+
+            cursor.execute(
+                """
+                UPDATE messages
+                SET satisfaction = %s
+                WHERE id = %s
+                RETURNING id, satisfaction
+                """,
+                (satisfaction, resolved_id),
+            )
+            updated = cursor.fetchone()
+    
+    return stringify_ids(dict(updated)) if updated else None
+
+
+def get_operator_by_email(email: str) -> dict[str, Any] | None:
+    row = fetch_one(
+        "SELECT id, email, password_hash FROM operators WHERE email = %s",
+        (email,),
+    )
+    return dict(row) if row else None
+
+
+def ensure_default_operator(email: str, password_hash: str) -> None:
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO operators (email, password_hash)
+                VALUES (%s, %s)
+                ON CONFLICT (email) DO NOTHING
+                """,
+                (email, password_hash),
+            )
+
+
+def get_tickets(
+    status: str | None = None,
+    priority: str | None = None,
+    domain: str | None = None,
+) -> list[dict[str, Any]]:
+    query = "SELECT * FROM tickets WHERE 1=1"
+    params = []
+    if status:
+        query += " AND status = %s"
+        params.append(status)
+    if priority:
+        query += " AND priority = %s"
+        params.append(priority)
+    if domain:
+        query += " AND domain = %s"
+        params.append(domain)
+    
+    query += " ORDER BY created_at DESC"
+    
+    rows = fetch_all(query, tuple(params))
+    return [stringify_ids(dict(row)) for row in rows]
+
+
+def get_ticket_detail(ticket_id: str) -> dict[str, Any] | None:
+    try:
+        resolved_id = uuid.UUID(ticket_id)
+    except ValueError:
+        return None
+
+    row = fetch_one("SELECT * FROM tickets WHERE id = %s", (resolved_id,))
+    if not row:
+        return None
+    
+    ticket = dict(row)
+    # Also get conversation messages
+    ticket["conversation"] = get_conversation_messages(str(ticket["conversation_id"]))
+    
+    return stringify_ids(ticket)
+
+
+def update_ticket_status(ticket_id: str, status: str) -> dict[str, Any] | None:
+    try:
+        resolved_id = uuid.UUID(ticket_id)
+    except ValueError:
+        return None
+
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE tickets
+                SET status = %s, updated_at = clock_timestamp()
+                WHERE id = %s
+                RETURNING id, status, updated_at
+                """,
+                (status, resolved_id),
+            )
+            row = cursor.fetchone()
+    
+    return stringify_ids(dict(row)) if row else None
+
+
 def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
     user_email = ticket_data.get("user_email") or ticket_data.get("contact_email")
     if not user_email:

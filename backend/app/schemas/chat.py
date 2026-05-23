@@ -27,10 +27,13 @@ class ChatResponseDTO(BaseModel):
     conversation_id: str | None = None
     user_message_id: str | None = None
     bot_message_id: str | None = None
+    message_id: str | None = None  # Alias for bot_message_id as per latest request
     answer: str
+    language: str | None = None  # NEW: The language used for the response
     extracted_text: str | None = None
     sources: list[SourceDTO] = Field(default_factory=list)
     maps: str | None = None
     should_escalate: bool = False
+    needs_email_for_ticket: bool = False  # Same as should_escalate
     reason: str | None = None
     ticket_draft: TicketDraftDTO | None = None

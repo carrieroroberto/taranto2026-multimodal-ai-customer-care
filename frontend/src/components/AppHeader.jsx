@@ -8,6 +8,7 @@ export function AppHeader({
   t,
   onLocaleChange,
   onThemeToggle,
+  onClearChat,
 }) {
   return (
     <header className="topbar relative z-10 shadow-sm backdrop-blur-xl">

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class ConversationRequestDTO(BaseModel):
-    session_id: str
+    session_id: str | None = None
 
 
 class ConversationResponseDTO(BaseModel):

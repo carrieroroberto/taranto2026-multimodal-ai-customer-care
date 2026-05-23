@@ -29,15 +29,15 @@ class TicketDraftDTO(BaseModel):
 
 
 class TicketRequestDTO(BaseModel):
+    conversation_id: str
+    user_email: str
     session_id: str | None = None
-    conversation_id: str | None = None
     category: TicketCategory | None = None
     domain: str | None = None
-    summary: str
+    summary: str | None = None
     user_message: str | None = None
     original_message: str | None = None
     translated_message: str | None = None
     priority: TicketPriority | None = None
-    user_email: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None

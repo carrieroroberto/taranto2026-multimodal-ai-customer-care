@@ -8,275 +8,160 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from backend.app.config import settings
-from backend.app.services.errors import DependencyServiceError
-from backend.app.services.rag_service import (
-    CalendarFact,
-    PlannedRetrievalQuery,
-    QueryPlan,
-    RetrievedContext,
-)
+from backend.app.services.rag_service import PlannedRetrievalQuery, QueryPlan, RetrievedContext
 
 
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = """Sei un agent AI multimodale per il customer care cittadino durante i Giochi del Mediterraneo 2026 a Taranto.
-
-GUARDRAIL DI SICUREZZA E PERTINENZA:
-1. RIFIUTA categoricamente di rispondere a messaggi che contengono linguaggio scurrile, volgare, offensivo, blasfemo o discriminatorio.
-2. Rispondi ESCLUSIVAMENTE a domande pertinenti ai Giochi del Mediterraneo 2026, alla citta di Taranto e territori coinvolti, o ai servizi correlati (trasporti, turismo, sport).
-3. Se l'utente usa un linguaggio inappropriato, rispondi: "Il servizio e' riservato a comunicazioni civili e istituzionali riguardanti i Giochi del Mediterraneo."
-4. Se l'utente pone domande non pertinenti (politica, intrattenimento non correlato, personaggi di fantasia come Goku, compiti scolastici), rispondi: "Posso rispondere solo a domande riguardanti i Giochi del Mediterraneo Taranto 2026 e i relativi servizi."
-5. Non usare conoscenza generale per rispondere a temi fuori dai Giochi.
-
-VALUTAZIONE RILEVANZA (RAG):
-- Riceverai delle "Informazioni disponibili" dal nostro database.
-- Se l'utente saluta (es. "ciao") o fa chiacchiere generiche, rispondi cordialmente e aggiungi il tag [NO_CONTEXT] alla fine.
-- Se identifichi la MASCOTTE IONIOS o l'EMBLEMA/LOGO dei Giochi nelle informazioni fornite (anche tramite analisi immagine), rispondi in modo esaustivo e NON aggiungere mai il tag [NO_CONTEXT].
-- Se le informazioni fornite sono totalmente inutili per la domanda, dichiara di non avere informazioni sufficienti e aggiungi il tag [NO_CONTEXT].
-- Non farti confondere da eventuali piccoli errori di trascrizione (OCR) nel testo dell'immagine: dai priorità alla "Descrizione visiva".
-
-REGOLE DI RISPOSTA:
-Rispondi a richieste testuali via API con tono chiaro, ufficiale e utile.
-Usa solo le informazioni fornite nel prompt utente.
-Controlla sempre l'elenco completo delle sedi e delle citta (Brindisi, Lecce, ecc.) prima di dichiarare che una localita non e' coinvolta.
-Rispondi nella stessa lingua della domanda originale, indicata nel prompt come lingua di risposta.
-Non inventare sport (es. pesca), prezzi, disponibilita, canali di acquisto, orari esatti, risultati live, atleti, coordinate o link Maps.
-Se il contesto ticketing dice che i biglietti non sono ancora disponibili o pubblicati, non dire mai che l'evento e' gratuito o che non serve biglietto.
-Se le informazioni fornite non contengono la risposta, dillo chiaramente e non usare conoscenza generale.
-Se un dato manca, dillo e proponi verifica ufficiale o operatore.
-Scrivi come un operatore umano: non citare base informativa, contesto, record, retrieval o fonti recuperate.
-Se la domanda richiede piu sedi, date o fasi, sintetizza tutti i dati pertinenti recuperati e non fermarti al primo risultato.
-Se la domanda riguarda un'edizione storica dei Giochi del Mediterraneo, non ricondurla a Taranto 2026.
-Rispondi in massimo 4 frasi brevi, senza formule finali generiche.
-Non usare "probabilmente": se il contesto conferma un dato, affermalo; se non lo conferma, dichiara che manca.
-Usa la denominazione esatta presente nel contesto per sport, sedi, citta e persone, anche se la domanda contiene refusi.
-Non scrivere URL nel testo: il backend li aggiunge come fonti strutturate.
-Non citare dettagli tecnici interni. Non usare tag <think>."""
-
-
-PARSER_SYSTEM_PROMPT = """Sei il query planner del chatbot Taranto 2026.
-Usa la cronologia della conversazione per risolvere riferimenti anaforici (es. "lui", "quello", "lì") e capire il contesto.
-Restituisci solo JSON valido e compatto su una sola riga, senza markdown e senza risposta finale.
-Schema:
-{
-  "query_it": "...",
-  "language": "it|en|fr|es|de|other",
-  "intent": "general_info|event_schedule|venue_info|ticketing|transport|accessibility|volunteering|history|contacts|complaint|unknown",
-  "domains": ["general", "calendar"],
-  "normalized_query": "...",
-  "entities": {
-    "sport": null,
-    "city": null,
-    "venue": null,
-    "date": null,
-    "event": null,
-    "ticket_type": null
-  },
-  "filters": ["..."],
-  "expanded_queries": ["..."],
-  "retrieval_queries": [
-    {"query": "...", "domain": "calendar", "weight": 1.0}
-  ],
-  "needs_clarification": false,
-  "clarification_question": null
-}
-Regole:
-- query_it e normalized_query devono essere in italiano per il retrieval;
-- correggi refusi evidenti e traduci semanticamente query non italiane;
-- scomponi richieste multi-dominio in massimo 4 retrieval_queries;
-- domains e domain sono solo hint per il retrieval;
-- filters contiene solo entita/concetti specifici, non parole generiche;
-- usa null per entita assenti;
-- non inventare fatti, date, prezzi, sedi, link o risultati."""
-
-
-TRANSLATION_SYSTEM_PROMPT = """Traduci il testo nella lingua richiesta.
-Mantieni significato, tono customer-care e dati fattuali.
-Non aggiungere informazioni, URL o spiegazioni."""
-
-
 @dataclass(frozen=True)
-class QueryAnalysis:
-    query_it: str
-    language: str
-    intent: str
-    domains: list[str]
-    normalized_query: str
-    entities: dict[str, str | None]
-    filters: list[str]
-    expanded_queries: list[str]
-    retrieval_queries: list[PlannedRetrievalQuery]
-    needs_clarification: bool
-    clarification_question: str | None
+class CalendarFact:
+    discipline: str | None
+    place: str
+    schedule: str
 
-
-LANGUAGE_NAMES = {
-    "it": "italiano",
-    "en": "inglese",
-    "fr": "francese",
-    "es": "spagnolo",
-    "de": "tedesco",
-}
 
 VALID_DOMAINS = {
-    "general",
-    "ticketing",
-    "venue",
     "calendar",
-    "volunteering",
-    "history",
+    "venue",
+    "city_sports",
+    "ticketing",
     "contacts",
+    "volunteering",
     "accessibility",
-    "motto",
     "partnership",
     "school_project",
-    "city_sports",
+    "history",
+    "general",
 }
 
 VALID_INTENTS = {
-    "general_info",
     "event_schedule",
-    "venue_info",
+    "venue_information",
     "ticketing",
-    "transport",
-    "accessibility",
-    "volunteering",
-    "history",
-    "contacts",
-    "complaint",
-    "unknown",
+    "general_information",
+    "participation",
 }
 
-ENTITY_KEYS = ("sport", "city", "venue", "date", "event", "ticket_type")
+ENTITY_KEYS = ("discipline", "venue", "city", "date", "item")
 
+LANGUAGE_NAMES = {
+    "it": "Italiano",
+    "en": "English",
+    "fr": "Français",
+    "es": "Español",
+    "ar": "العربية",
+}
 
-def analyze_query(query: str, history: list[dict[str, Any]] | None = None) -> QueryAnalysis:
-    history_text = ""
+QUERY_PLAN_SYSTEM_PROMPT = """
+Sei un analista esperto per i Giochi del Mediterraneo Taranto 2026.
+Il tuo compito è analizzare la domanda dell'utente e produrre un piano di ricerca in formato JSON.
+
+Domini validi:
+- calendar: date, orari e fasi delle gare (es. "quando ci sono le gare di nuoto?", "programma atletica")
+- venue: informazioni sugli impianti e luoghi (es. "dove si gioca a tennis?", "indirizzo stadio")
+- city_sports: quali sport si fanno in una città (es. "cosa fanno a Lecce?")
+- ticketing: biglietti, costi, dove comprarli
+- contacts: come contattare l'organizzazione o i volontari
+- volunteering: come diventare volontario
+- accessibility: info per disabili
+- history: storia dei giochi del mediterraneo
+- general: info generali sull'evento
+
+Intenti validi: event_schedule, venue_information, ticketing, general_information, participation.
+
+IMPORTANTE: Rileva la lingua del messaggio dell'utente. Se l'utente scrive in inglese, usa "en", se in spagnolo "es", etc. La "response_language" deve corrispondere alla lingua in cui l'utente sta parlando.
+
+Rispondi SOLO con il JSON, senza spiegazioni.
+JSON Schema:
+{
+  "intent": "...",
+  "domains": ["..."],
+  "retrieval_queries": [
+    {"query": "stringa ottimizzata per ricerca semantica", "domain": "dominio_specifico", "weight": 1.0}
+  ],
+  "entities": {"discipline": null, "venue": null, "city": null, "date": null},
+  "response_language": "it/en/fr/es/ar",
+  "needs_clarification": false,
+  "clarification_question": null
+}
+"""
+
+TRANSLATION_SYSTEM_PROMPT = """
+Sei un traduttore esperto. Traduci il testo fornito nella lingua richiesta mantenendo il tono istituzionale e cordiale.
+Non aggiungere commenti, rispondi solo con la traduzione.
+"""
+
+def build_query_plan(message: str, history: list[dict[str, Any]] | None = None) -> QueryPlan:
+    history_context = ""
     if history:
-        history_text = "Cronologia recente:\n" + "\n".join(
-            f"Utente: {h.get('message')}\nBot: {h.get('answer')}"
-            for h in history
+        history_context = "Cronologia recente:\n" + "\n".join(
+            f"U: {h.get('message')}\nB: {h.get('answer')}" for h in history[-3:]
         ) + "\n\n"
 
     payload = {
-        "model": settings.query_parser_model,
+        "model": settings.ollama_model,
         "messages": [
-            {"role": "system", "content": PARSER_SYSTEM_PROMPT},
-            {"role": "user", "content": f"{history_text}Domanda attuale: {query}"},
+            {"role": "system", "content": QUERY_PLAN_SYSTEM_PROMPT},
+            {"role": "user", "content": f"{history_context}Domanda utente: {message}"},
         ],
-        "format": "json",
         "stream": False,
-        "think": False,
-        "keep_alive": "30m",
         "options": {
             "temperature": 0,
-            "num_predict": max(settings.query_parser_num_predict, 420),
-            "num_ctx": 1024,
+            "num_predict": 400,
         },
     }
-    response = call_ollama(
-        payload,
-        timeout=max(
-            settings.query_parser_timeout_seconds,
-            settings.llm_timeout_seconds,
-            150,
-        ),
-    )
-    content = response.get("message", {}).get("content", "")
-    parsed = parse_json_object(content)
 
-    query_it = str(
-        parsed.get("query_it")
-        or parsed.get("normalized_query")
-        or query
-    ).strip()
-    normalized_query = str(parsed.get("normalized_query") or query_it).strip()
-    domains = normalize_domains(parsed.get("domains"), parsed.get("domain"))
-    retrieval_queries = parse_retrieval_queries(
-        parsed.get("retrieval_queries"),
-        fallback_query=normalized_query or query_it or query,
-        fallback_domains=domains,
-    )
-
-    return QueryAnalysis(
-        query_it=query_it,
-        language=normalize_language_code(parsed.get("language")),
-        intent=normalize_intent(parsed.get("intent")),
-        domains=domains,
-        normalized_query=normalized_query,
-        entities=normalized_entities(parsed.get("entities")),
-        filters=string_list(parsed.get("filters"), limit=8),
-        expanded_queries=string_list(parsed.get("expanded_queries"), limit=4),
-        retrieval_queries=retrieval_queries,
-        needs_clarification=bool(parsed.get("needs_clarification", False)),
-        clarification_question=optional_string(parsed.get("clarification_question")),
-    )
-
-
-def build_query_plan(query: str, history: list[dict[str, Any]] | None = None) -> QueryPlan:
     try:
-        return build_llm_query_plan(query, history)
+        response = call_ollama(payload)
+        content = response.get("message", {}).get("content") or response.get("response")
+        plan_data = parse_json_object(content)
+        
+        return QueryPlan(
+            original_query=message,
+            intent=normalize_intent(plan_data.get("intent")),
+            domains=normalize_domains(plan_data.get("domains"), "general"),
+            retrieval_queries=parse_retrieval_queries(
+                plan_data.get("retrieval_queries"), message, ["general"]
+            ),
+            entities=normalized_entities(plan_data.get("entities")),
+            response_language=normalize_language_code(plan_data.get("response_language")),
+            needs_clarification=bool(plan_data.get("needs_clarification")),
+            clarification_question=optional_string(plan_data.get("clarification_question")),
+        )
     except Exception as exc:
-        logger.warning("query_parser_fallback error=%s", exc)
-        return fallback_query_plan(query)
+        logger.warning("query_plan_fallback error=%s", exc)
+        return fallback_query_plan(message)
 
 
-def build_llm_query_plan(query: str, history: list[dict[str, Any]] | None = None) -> QueryPlan:
-    analysis = analyze_query(query, history)
-    retrieval_query = analysis.normalized_query or analysis.query_it or query
-    expanded_queries = deduplicate_queries(
-        [
-            retrieval_query,
-            *analysis.expanded_queries,
-            *[item.query for item in analysis.retrieval_queries],
-        ]
-    )[:4]
-    domains = analysis.domains or ["general"]
-    domain = primary_domain(domains)
-
+def fallback_query_plan(message: str) -> QueryPlan:
     return QueryPlan(
-        original_query=query,
-        retrieval_query=retrieval_query,
-        response_language=analysis.language,
-        domain=domain,
-        filters=analysis.filters,
-        expanded_queries=expanded_queries,
-        intent=analysis.intent,
-        domains=domains,
-        entities=analysis.entities,
-        retrieval_queries=analysis.retrieval_queries,
-        needs_clarification=analysis.needs_clarification,
-        clarification_question=analysis.clarification_question,
-    )
-
-
-def fallback_query_plan(query: str) -> QueryPlan:
-    retrieval_query = query.strip()
-    return QueryPlan(
-        original_query=query,
-        retrieval_query=retrieval_query,
-        response_language="it",
+        original_query=message,
+        retrieval_query=message,
+        intent="general_information",
         domain="general",
-        filters=[],
-        expanded_queries=[retrieval_query],
-        intent="unknown",
         domains=["general"],
-        entities={},
-        retrieval_queries=[
-            PlannedRetrievalQuery(query=retrieval_query, domain=None, weight=1.0)
-        ],
-        needs_clarification=False,
-        clarification_question=None,
+        retrieval_queries=[PlannedRetrievalQuery(query=message, domain=None, weight=1.0)],
+        entities={k: None for k in ENTITY_KEYS},
+        response_language="it",
+        expanded_queries=[message],
+        filters=[],
     )
 
 
-def generate_grounded_answer(prompt: str, response_language: str) -> str:
-    language_name = response_language_name(response_language)
+def generate_grounded_answer(prompt: str, language_code: str) -> str:
+    language_name = response_language_name(language_code)
     payload = {
         "model": settings.ollama_model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "system",
+                "content": (
+                    "Sei TARA, l'assistente virtuale ufficiale dei Giochi del Mediterraneo Taranto 2026. "
+                    "Il tuo tono è professionale, accogliente e preciso. "
+                    f"Rispondi ESCLUSIVAMENTE in lingua {language_name}."
+                ),
+            },
             {
                 "role": "user",
                 "content": f"Lingua risposta obbligatoria: {language_name}\n\n{prompt}",
@@ -305,16 +190,21 @@ def build_answer(
     reason: str | None,
     history: list[dict[str, Any]] | None = None,
 ) -> str:
+    # CASE 1: Explicit operator request
+    if explicit_operator_requested(message) or reason == "human_operator_requested":
+        return human_operator_answer(plan.response_language)
+        
     if not contexts:
-        answer = unavailable_answer(plan.response_language)
-    elif should_escalate and reason in {
-        "human_operator_requested",
+        return unavailable_answer(plan.response_language)
+    
+    if should_escalate and reason in {
         "urgent_request",
         "live_data_unavailable",
         "complaint_or_lost_item",
     }:
-        answer = unavailable_answer(plan.response_language)
-    elif plan.domain == "ticketing" and set(plan.domains).issubset({"ticketing", "general"}):
+        return unavailable_answer(plan.response_language)
+        
+    if plan.domain == "ticketing" and set(plan.domains).issubset({"ticketing", "general"}):
         answer = ticketing_guardrail_answer(plan.response_language)
     else:
         prompt = build_user_prompt(message, plan, contexts, history)
@@ -323,6 +213,100 @@ def build_answer(
         answer = enforce_ticketing_guardrail(answer, plan, contexts)
 
     return clean_answer_text(answer)
+
+
+def explicit_operator_requested(message: str) -> bool:
+    normalized = normalize_text(message)
+    
+    # CASE 1: Keyword "operat" (catches operatore, operatori, operator, operators)
+    if "operat" in normalized:
+        # Check if it's accompanied by a verb or intent to talk in IT or EN
+        actions = ("parl", "voglio", "contatt", "sentir", "paral", "chiedere", "necessit", "serve", "posso", 
+                   "speak", "talk", "want", "contact", "need", "can", "could")
+        if any(a in normalized for a in actions):
+            return True
+        # Short phrases
+        if len(normalized.split()) <= 3:
+            return True
+
+    # CASE 2: Other human-related requests (IT/EN)
+    human_keywords = ("umano", "persone", "persona", "esperto", "assistenza", "human", "person", "expert", "support", "real person")
+    if any(k in normalized for k in human_keywords):
+        actions = ("parl", "voglio", "contatt", "sentir", "paral", "chiedere", "necessit", "serve", "posso",
+                   "speak", "talk", "want", "contact", "need", "can", "could")
+        if any(a in normalized for a in actions):
+            return True
+
+    return False
+
+
+def is_refusal_answer(answer: str) -> bool:
+    normalized = normalize_text(answer)
+    refusal_keywords = [
+        "informazioni sufficienti", 
+        "dato abbastanza preciso", 
+        "non ho informazioni", 
+        "non risultano ancora disponibili",
+        "non sono ancora pubblicati",
+        "non dispongo di informazioni",
+        "i don't have enough information",
+        "enough precise information",
+        "not available yet",
+        "no tengo informacion",
+        "no dispongo de informacion",
+        "pas d'informations",
+        "non ho un dato",
+        "domanda non e specifica",
+        "indica cosa desideri sapere",
+        "per favore specifica",
+        "non posso rispondere",
+        "non ho dettagli",
+        "servizio e riservato a comunicazioni civili",
+        "posso rispondere solo a domande riguardanti i giochi",
+        "inserisci l'email",
+        "enter your email",
+        "ingresa tu correo",
+        "saisissez votre e-mail",
+        "verrai ricontattato da un operatore",
+        "contacted by a human operator",
+        "operador humano se pondra en contacto",
+        "contacte par un operateur humain"
+    ]
+    return any(kw in normalized for kw in refusal_keywords)
+
+
+def human_operator_answer(response_language: str = "it") -> str:
+    # Hardcoded for reliability across common languages
+    answers = {
+        "it": "Certo, inserisci l'email qui sotto nella casella di testo e verrai ricontattato da un operatore umano il prima possibile.",
+        "en": "Sure, enter your email in the text box below and you will be contacted by a human operator as soon as possible.",
+        "es": "Claro, ingresa tu correo electrónico en el cuadro de texto a continuación y un operador humano se pondrá en contacto contigo lo antes posible.",
+        "fr": "Bien sûr, saisissez votre e-mail dans la zone de texte ci-dessous et vous serez contacté par un opérateur humain dès que possible.",
+        "ar": "بالتأكيد، أدخل بريدك الإلكتروني في مربع النص أدناه وسيتصل بك موظف بشري في أقرب وقت ممكن."
+    }
+    lang = normalize_language_code(response_language)
+    return answers.get(lang, answers["it"])
+
+
+def unavailable_answer(response_language: str = "it") -> str:
+    answers = {
+        "it": "Al momento non ho un dato abbastanza preciso per risponderti con sicurezza. Posso indicarti il canale ufficiale o preparare una richiesta per un operatore.",
+        "en": "I don't have enough precise information to answer you with certainty right now. I can direct you to the official channel or prepare a request for an operator.",
+        "es": "No tengo información suficientemente precisa para responderte con seguridad en este momento. Puedo dirigirte al canal oficial o preparar una solicitud para un operador.",
+        "fr": "Je n'ai pas d'informations suffisamment précises per vous répondre avec certitude pour le moment. Je peux vous diriger vers le canal officiel ou préparer une demande pour un opérateur.",
+        "ar": "ليس لدي معلومات دقيقة كافية للإجابة عليك بيقين في الوقت الحالي. يمكنني توجيهك إلى القناة الرسمية أو إعداد طلب لموظف."
+    }
+    lang = normalize_language_code(response_language)
+    return answers.get(lang, answers["it"])
+
+
+def ticketing_guardrail_answer(response_language: str = "it") -> str:
+    answer = (
+        "Al momento i biglietti per Taranto 2026 non risultano ancora disponibili. "
+        "Non sono ancora pubblicati ufficialmente prezzi, canali di acquisto, "
+        "disponibilita o distinzione tra eventi gratuiti e a pagamento."
+    )
+    return translate_static_answer(answer, response_language)
 
 
 def build_user_prompt(
@@ -603,32 +587,17 @@ def compact_document(document: str) -> str:
     return compacted[: max_chars - 3].rstrip() + "..."
 
 
-def unavailable_answer(response_language: str = "it") -> str:
-    answer = (
-        "Al momento non ho un dato abbastanza preciso per risponderti con sicurezza. "
-        "Posso indicarti il canale ufficiale o preparare una richiesta per un operatore."
-    )
-    return translate_static_answer(answer, response_language)
-
-
-def ticketing_guardrail_answer(response_language: str = "it") -> str:
-    answer = (
-        "Al momento i biglietti per Taranto 2026 non risultano ancora disponibili. "
-        "Non sono ancora pubblicati ufficialmente prezzi, canali di acquisto, "
-        "disponibilita o distinzione tra eventi gratuiti e a pagamento."
-    )
-    return translate_static_answer(answer, response_language)
-
-
 def translate_static_answer(answer: str, response_language: str) -> str:
-    if response_language == "it":
+    lang_code = normalize_language_code(response_language)
+    if lang_code == "it":
         return answer
     try:
-        return translate_text(answer, response_language)
-    except DependencyServiceError as exc:
+        # Force translation for static strings
+        return translate_text(answer, lang_code)
+    except Exception as exc:
         logger.warning(
             "static_answer_translation_fallback language=%s error=%s",
-            response_language,
+            lang_code,
             exc,
         )
         return answer
@@ -663,10 +632,13 @@ def context_type(context: RetrievedContext) -> str:
 
 
 def translate_text(text: str, target_language: str) -> str:
-    if normalize_language_code(target_language) == "it":
+    # Always attempt translation unless we are absolutely sure target == source
+    # Since we don't know the source, we let the LLM decide or try to translate.
+    # To avoid infinite loops or useless work, we only skip if text is empty.
+    if not text.strip():
         return text
 
-    language_name = response_language_name(target_language)
+    target_lang_name = response_language_name(target_language)
     payload = {
         "model": settings.ollama_model,
         "messages": [
@@ -674,7 +646,7 @@ def translate_text(text: str, target_language: str) -> str:
             {
                 "role": "user",
                 "content": (
-                    f"Lingua richiesta: {language_name}\n\n"
+                    f"Lingua richiesta: {target_lang_name}\n\n"
                     f"Testo da tradurre:\n{text}"
                 ),
             },
@@ -690,6 +662,7 @@ def translate_text(text: str, target_language: str) -> str:
     response = call_ollama(payload)
     translated = response.get("message", {}).get("content") or response.get("response")
     if not translated:
+        from backend.app.services.errors import DependencyServiceError
         raise DependencyServiceError("Ollama returned an empty translation.")
     return strip_thinking(translated).strip()
 
@@ -712,14 +685,17 @@ def call_ollama(
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
+        from backend.app.services.errors import DependencyServiceError
         raise DependencyServiceError(
             f"Ollama error for model {settings.ollama_model}: HTTP {exc.code} {detail}"
         ) from exc
     except (TimeoutError, URLError) as exc:
+        from backend.app.services.errors import DependencyServiceError
         raise DependencyServiceError(
             f"Ollama unavailable at {settings.ollama_base_url}: {exc}"
         ) from exc
     except json.JSONDecodeError as exc:
+        from backend.app.services.errors import DependencyServiceError
         raise DependencyServiceError(f"Ollama returned invalid JSON: {exc}") from exc
 
 

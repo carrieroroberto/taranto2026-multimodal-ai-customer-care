@@ -16,9 +16,11 @@ router = APIRouter(tags=["conversations"])
 
 @router.post("/conversations", response_model=ConversationResponseDTO)
 def start_conversation(request: ConversationRequestDTO) -> ConversationResponseDTO:
-    conversation_id = ensure_conversation(session_id=request.session_id)
+    import uuid
+    session_id = request.session_id or str(uuid.uuid4())
+    conversation_id = ensure_conversation(session_id=session_id)
     return ConversationResponseDTO(
-        session_id=request.session_id,
+        session_id=session_id,
         conversation_id=conversation_id,
     )
 

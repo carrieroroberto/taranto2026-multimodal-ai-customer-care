@@ -86,6 +86,29 @@ export async function sendFeedback({ sessionId, messageId, satisfied }) {
   return payload;
 }
 
+export async function sendTicket({ conversationId, userEmail, language }) {
+  const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/tickets`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      user_email: userEmail,
+      language,
+    }),
+    timeoutMs: 30000,
+  });
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
 export async function sendMultimodalMessage({ file, message, sessionId, language, signal }) {
   const formData = new FormData();
   formData.append("file", file);

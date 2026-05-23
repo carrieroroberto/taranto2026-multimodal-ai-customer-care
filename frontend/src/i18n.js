@@ -46,6 +46,7 @@ export const translations = {
     feedbackNegative: "Risposta non utile",
     themeToLight: "Passa alla modalità chiara",
     themeToDark: "Passa alla modalità scura",
+    clearChat: "Pulisci chat",
     welcomePrefix: "Ciao, sono",
     welcomeMiddle: "! Come posso aiutarti per i ",
     eventName: "Giochi del Mediterraneo 2026",
@@ -55,6 +56,11 @@ export const translations = {
       "Qual è il programma degli eventi?",
       "Quali città sono coinvolte?",
     ],
+    ticketEmailPlaceholder: "Email per il supporto",
+    ticketSend: "Invia richiesta operatore",
+    ticketSuccess: "Richiesta inviata con successo!",
+    ticketError: "Impossibile inviare il ticket.",
+    ticketCancel: "Annulla",
   },
 
   en: {
@@ -101,6 +107,11 @@ export const translations = {
       "What is the event schedule?",
       "Which cities are involved?",
     ],
+    ticketEmailPlaceholder: "Support email",
+    ticketSend: "Send operator request",
+    ticketSuccess: "Request sent successfully!",
+    ticketError: "Failed to send ticket.",
+    ticketCancel: "Cancel",
   },
 
   es: {
@@ -118,7 +129,7 @@ export const translations = {
     gamesStarted: "Juegos en curso",
     officialSiteAria: "Abrir el sitio oficial de Taranto 2026",
     messageLabel: "Mensaje",
-    messagePlaceholder: "Escribe un mensaje",
+    messagePlaceholder: "Escribe un messaggio",
     sendMessage: "Enviar mensaje",
     stopMessage: "Detener respuesta",
     uploadImage: "Subir imagen",
@@ -134,7 +145,7 @@ export const translations = {
     stoppedResponse: "Solicitud interrumpida.",
     errorPrefix: "Se ha producido un error:",
     feedbackLabel: "Valorar respuesta",
-    feedbackPositive: "Respuesta útil",
+    feedbackPositive: "Respuesta utile",
     feedbackNegative: "Respuesta no útil",
     themeToLight: "Cambiar a modo claro",
     themeToDark: "Cambiar a modo oscuro",
@@ -147,6 +158,11 @@ export const translations = {
       "¿Cuál es el programa de eventos?",
       "¿Qué ciudades participan?",
     ],
+    ticketEmailPlaceholder: "Correo electrónico de soporte",
+    ticketSend: "Enviar solicitud al operador",
+    ticketSuccess: "¡Solicitud enviada con éxito!",
+    ticketError: "Error al enviar la solicitud.",
+    ticketCancel: "Cancelar",
   },
 
   fr: {
@@ -175,7 +191,7 @@ export const translations = {
     cancelRecording: "Annuler l'enregistrement",
     sendAudio: "Envoyer l'audio",
     audioMessage: "Message audio",
-    typing: "Préparation de la réponse",
+    typing: "Préparation de la risposta",
     unavailableAnswer: "Réponse non disponible.",
     stoppedResponse: "Réponse interrompue.",
     errorPrefix: "Une erreur s’est produite :",
@@ -191,8 +207,13 @@ export const translations = {
     welcomeSuggestions: [
       "Qu’est-ce que c’est ?",
       "Quel est le programme des événements ?",
-      "Quelles villes sont impliquées ?",
+      "Quelles villes sono coinvolte ?",
     ],
+    ticketEmailPlaceholder: "E-mail d'assistance",
+    ticketSend: "Envoyer une demande à l'opérateur",
+    ticketSuccess: "Demande envoyée avec succès !",
+    ticketError: "Échec de l'envoi de la demande.",
+    ticketCancel: "Annuler",
   },
 
   ar: {
@@ -239,6 +260,11 @@ export const translations = {
       "ما هو برنامج الفعاليات؟",
       "ما المدن المشاركة؟",
     ],
+    ticketEmailPlaceholder: "البريد الإلكتروني للدعم",
+    ticketSend: "إرسال طلب للموظف",
+    ticketSuccess: "تم إرسال الطلب بنجاح!",
+    ticketError: "فشل إرسال الطلب.",
+    ticketCancel: "إلغاء",
   },
 };
 

@@ -19,6 +19,7 @@ import {
   sendChatMessage,
   sendFeedback,
   sendMultimodalMessage,
+  sendTicket,
   startConversation,
 } from "../services/chatApi.js";
 import { getOrCreateSessionId } from "../utils/session.js";
@@ -38,14 +39,17 @@ const THEME_STORAGE_KEY = "tarai-theme";
 export function ChatPage() {
   const [messages, setMessages] = useState(initialMessages);
   const [isSending, setIsSending] = useState(false);
+  const [isEscalating, setIsEscalating] = useState(false);
+  const [isSendingTicket, setIsSendingTicket] = useState(false);
   const [theme, setTheme] = useState(() => getInitialTheme());
   const [locale, setLocale] = useState(() => getInitialLocale());
   const sessionIdRef = useRef(getOrCreateSessionId());
   const messageListRef = useRef(null);
   const abortControllerRef = useRef(null);
   const scrollAnimationFrameRef = useRef(null);
+  
   const localeConfig = getLocaleConfig(locale);
-  const t = translations[locale];
+  const t = translations[locale] || translations["it"];
 
   useEffect(() => {
     let isCancelled = false;
@@ -55,26 +59,40 @@ export function ChatPage() {
       try {
         await startConversation({ sessionId });
         const payload = await fetchConversationMessages({ sessionId });
-        if (isCancelled || !Array.isArray(payload.messages)) {
+        
+        if (isCancelled || !payload || !Array.isArray(payload.messages)) {
           return;
         }
 
         const persistedMessages = payload.messages.map(mapPersistedMessage);
-        if (!persistedMessages.length) {
-          return;
+        
+        if (persistedMessages.length > 0) {
+          setMessages((currentMessages) => {
+            const onlyWelcome =
+              currentMessages.length === 1 &&
+              currentMessages[0]?.id === initialMessages[0].id;
+
+            return onlyWelcome
+              ? [initialMessages[0], ...persistedMessages]
+              : currentMessages;
+          });
+
+          // PERSIST ESCALATION STATE
+          const lastMsg = persistedMessages[persistedMessages.length - 1];
+          if (lastMsg && lastMsg.role === "assistant") {
+            const text = (lastMsg.text || "").toLowerCase();
+            if (
+              text.includes("inserisci l'email") || 
+              text.includes("enter your email") ||
+              text.includes("ingresa tu correo") ||
+              text.includes("saisissez votre e-mail")
+            ) {
+              setIsEscalating(true);
+            }
+          }
         }
-
-        setMessages((currentMessages) => {
-          const onlyWelcome =
-            currentMessages.length === 1 &&
-            currentMessages[0]?.id === initialMessages[0].id;
-
-          return onlyWelcome
-            ? [initialMessages[0], ...persistedMessages]
-            : currentMessages;
-        });
       } catch (error) {
-        console.warn("Conversation hydration failed", error);
+        console.error("Hydration error:", error);
       }
     }
 
@@ -105,79 +123,15 @@ export function ChatPage() {
   }, [locale, localeConfig.dir, localeConfig.htmlLang, t.pageTitle]);
 
   useEffect(() => {
-    let secondFrameId = null;
-
-    const firstFrameId = window.requestAnimationFrame(() => {
-      scrollMessagesToBottom("smooth");
-      secondFrameId = window.requestAnimationFrame(() => {
-        scrollMessagesToBottom("smooth");
-      });
-    });
-
-    const fallbackTimeoutId = window.setTimeout(() => {
-      scrollMessagesToBottom("smooth");
-    }, 120);
-
-    return () => {
-      window.cancelAnimationFrame(firstFrameId);
-      if (secondFrameId) {
-        window.cancelAnimationFrame(secondFrameId);
-      }
-      window.clearTimeout(fallbackTimeoutId);
-      if (scrollAnimationFrameRef.current) {
-        window.cancelAnimationFrame(scrollAnimationFrameRef.current);
-        scrollAnimationFrameRef.current = null;
-      }
-    };
+    scrollMessagesToBottom("smooth");
   }, [messages]);
 
   function scrollMessagesToBottom(behavior = "smooth") {
     const messageListElement = messageListRef.current;
-    if (!messageListElement) {
-      return;
-    }
+    if (!messageListElement) return;
 
-    const targetTop = Math.max(
-      0,
-      messageListElement.scrollHeight - messageListElement.clientHeight,
-    );
-
-    if (scrollAnimationFrameRef.current) {
-      window.cancelAnimationFrame(scrollAnimationFrameRef.current);
-      scrollAnimationFrameRef.current = null;
-    }
-
-    if (behavior !== "smooth") {
-      messageListElement.scrollTop = targetTop;
-      return;
-    }
-
-    const startTop = messageListElement.scrollTop;
-    const distance = targetTop - startTop;
-
-    if (Math.abs(distance) < 1) {
-      return;
-    }
-
-    const durationMs = 260;
-    const startedAt = performance.now();
-
-    function animateScroll(now) {
-      const progress = Math.min((now - startedAt) / durationMs, 1);
-      const easedProgress = 1 - (1 - progress) ** 3;
-
-      messageListElement.scrollTop = startTop + distance * easedProgress;
-
-      if (progress < 1) {
-        scrollAnimationFrameRef.current =
-          window.requestAnimationFrame(animateScroll);
-      } else {
-        scrollAnimationFrameRef.current = null;
-      }
-    }
-
-    scrollAnimationFrameRef.current =
-      window.requestAnimationFrame(animateScroll);
+    const targetTop = Math.max(0, messageListElement.scrollHeight - messageListElement.clientHeight);
+    messageListElement.scrollTo({ top: targetTop, behavior });
   }
 
   function handleStop() {
@@ -185,39 +139,45 @@ export function ChatPage() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsSending(false);
-      
-      // Update the last assistant message to show it was stopped
-      setMessages((currentMessages) => {
-        const lastMessage = currentMessages[currentMessages.length - 1];
-        if (lastMessage?.role === "assistant" && lastMessage.isLoading) {
-          return [
-            ...currentMessages.slice(0, -1),
-            {
-              ...lastMessage,
-              text: t.stoppedResponse,
-              isLoading: false,
-              isError: true,
-            },
-          ];
-        }
-        return currentMessages;
-      });
     }
   }
 
   async function handleSend(message) {
-    if (!message || isSending) {
+    if (!message || isSending) return;
+
+    // CASO INVIO EMAIL TICKET
+    if (isEscalating) {
+      setIsSendingTicket(true);
+      try {
+        const lastBotWithConv = [...messages].reverse().find(m => m.conversationId);
+        if (!lastBotWithConv) throw new Error("No conversation found");
+
+        await sendTicket({
+          conversationId: lastBotWithConv.conversationId,
+          userEmail: message,
+          language: locale
+        });
+
+        // RESET IMMEDIATO STATO ESCALATION
+        setIsEscalating(false); 
+        
+        // Aggiungi messaggio conferma in chat
+        const successMsg = createMessage("assistant", t.ticketSuccess);
+        setMessages(prev => [...prev, successMsg]);
+      } catch (error) {
+        console.error("Ticket submission failed", error);
+        alert(t.ticketError);
+      } finally {
+        setIsSendingTicket(false);
+      }
       return;
     }
 
+    // CASO MESSAGGIO CHAT NORMALE
     const userMessage = createMessage("user", message);
     const pendingMessage = createMessage("assistant", "", true);
 
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      userMessage,
-      pendingMessage,
-    ]);
+    setMessages((prev) => [...prev, userMessage, pendingMessage]);
     setIsSending(true);
 
     const controller = new AbortController();
@@ -238,10 +198,20 @@ export function ChatPage() {
         sources: normalizeSources(response.sources),
         isLoading: false,
       });
+      
       patchMessage(userMessage.id, {
         persistedId: response.user_message_id || null,
         conversationId: response.conversation_id || null,
       });
+
+      // AUTO-SWITCH LINGUA BASATO SUL MESSAGGIO
+      if (response.language && response.language !== locale) {
+        setLocale(response.language);
+      }
+
+      if (response.needs_email_for_ticket) {
+        setIsEscalating(true);
+      }
     } catch (error) {
       if (error.name === "AbortError") return;
       patchMessage(pendingMessage.id, {
@@ -258,22 +228,15 @@ export function ChatPage() {
   }
 
   async function handleFileSend(file, message = "", metadata = {}) {
-    if (!file || isSending) {
-      return;
-    }
+    if (!file || isSending) return;
 
     const isImage = file.type.startsWith("image/");
     const trimmedMessage = message.trim();
-    if (isImage && !trimmedMessage) {
-      return;
-    }
+    if (isImage && !trimmedMessage) return;
 
     const objectUrl = URL.createObjectURL(file);
+    const userMessage = createMessage("user", isImage ? trimmedMessage : "");
     
-    const userMessage = createMessage(
-      "user",
-      isImage ? trimmedMessage : ""
-    );
     if (isImage) {
       userMessage.messageType = "image";
       userMessage.image = objectUrl;
@@ -287,12 +250,7 @@ export function ChatPage() {
     }
 
     const pendingMessage = createMessage("assistant", "", true);
-
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      userMessage,
-      pendingMessage,
-    ]);
+    setMessages((prev) => [...prev, userMessage, pendingMessage]);
     setIsSending(true);
 
     const controller = new AbortController();
@@ -318,6 +276,15 @@ export function ChatPage() {
         persistedId: response.user_message_id || null,
         conversationId: response.conversation_id || null,
       });
+
+      // AUTO-SWITCH LINGUA
+      if (response.language && response.language !== locale) {
+        setLocale(response.language);
+      }
+
+      if (response.needs_email_for_ticket) {
+        setIsEscalating(true);
+      }
     } catch (error) {
       if (error.name === "AbortError") return;
       patchMessage(pendingMessage.id, {
@@ -342,7 +309,7 @@ export function ChatPage() {
   }
 
   function handleThemeToggle() {
-    setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }
 
   function handleLocaleChange(nextLocale) {
@@ -350,33 +317,36 @@ export function ChatPage() {
   }
 
   async function handleFeedback(message, satisfied) {
-    const messageId = message.persistedId || message.id;
-    if (!messageId || message.isLoading || message.isError) {
-      return;
-    }
+    const mId = message.persistedId || message.id;
+    if (!mId || message.isLoading || message.isError) return;
 
-    const previousSatisfaction = message.satisfaction;
     patchMessage(message.id, { satisfaction: satisfied });
 
     try {
-      await sendFeedback({
-        sessionId: sessionIdRef.current,
-        messageId,
-        satisfied,
-      });
-    } catch (error) {
-      console.warn("Feedback failed", error);
-      patchMessage(message.id, { satisfaction: previousSatisfaction ?? null });
+      await sendFeedback({ sessionId: sessionIdRef.current, messageId: mId, satisfied });
+      
+      // ESCALATION SU FEEDBACK NEGATIVO
+      if (satisfied === false) {
+        setIsEscalating(true);
+        const apologyText = locale === "it" 
+          ? "Mi dispiace che la risposta non sia stata soddisfacente. Se desideri, inserisci la tua email qui sotto per essere ricontattato da un operatore umano."
+          : "I'm sorry the answer was not satisfactory. If you wish, enter your email below to be contacted by a human operator.";
+          
+        const apologyMsg = createMessage("assistant", apologyText);
+        apologyMsg.conversationId = message.conversationId;
+        setMessages(prev => [...prev, apologyMsg]);
+      }
+    } catch (e) {
+      console.warn(e);
     }
   }
 
+  function handleCancelEscalation() {
+    setIsEscalating(false);
+  }
+
   return (
-    <div
-      className="app-surface relative flex h-dvh max-h-dvh flex-col overflow-hidden"
-      data-theme={theme}
-      dir={localeConfig.dir}
-      lang={localeConfig.htmlLang}
-    >
+    <div className="app-surface relative flex h-dvh max-h-dvh flex-col overflow-hidden" data-theme={theme}>
       <DecorativeBackground />
       <AppHeader
         locale={locale}
@@ -394,23 +364,6 @@ export function ChatPage() {
               isSending={isSending}
               messages={messages}
               listRef={messageListRef}
-              mobileActionSlot={
-                <div className="floating-mobile-actions">
-                  <LanguageSelector
-                    className="language-select-mobile"
-                    locale={locale}
-                    locales={SUPPORTED_LOCALES}
-                    t={t}
-                    onLocaleChange={handleLocaleChange}
-                  />
-                  <ThemeToggle
-                    className="theme-toggle-mobile"
-                    theme={theme}
-                    t={t}
-                    onThemeToggle={handleThemeToggle}
-                  />
-                </div>
-              }
               suggestedQuestions={t.welcomeSuggestions || []}
               theme={theme}
               t={t}
@@ -418,12 +371,15 @@ export function ChatPage() {
               onFeedback={handleFeedback}
               onSuggestionClick={handleSend}
             />
+
             <ChatComposer
-              isSending={isSending}
+              isSending={isSending || isSendingTicket}
               t={t}
               onSend={handleSend}
               onFileSend={handleFileSend}
               onStop={handleStop}
+              isEscalating={isEscalating}
+              onCancelEscalation={handleCancelEscalation}
             />
           </section>
         </div>
@@ -433,25 +389,13 @@ export function ChatPage() {
 }
 
 function getInitialTheme() {
-  if (typeof window === "undefined") {
-    return "light";
-  }
-
-  const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-  if (savedTheme === "dark" || savedTheme === "light") {
-    return savedTheme;
-  }
-
-  return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches
-    ? "dark"
-    : "light";
+  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return saved || (window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light");
 }
 
 function createMessage(role, text, isLoading = false) {
   return {
-    id:
-      globalThis.crypto?.randomUUID?.() ||
-      `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: globalThis.crypto?.randomUUID?.() || Date.now().toString(),
     role,
     text,
     persistedId: null,
@@ -463,26 +407,20 @@ function createMessage(role, text, isLoading = false) {
   };
 }
 
-function mapPersistedMessage(message) {
+function mapPersistedMessage(m) {
   return {
-    id: message.id,
-    persistedId: message.id,
-    conversationId: message.conversation_id,
-    role: message.role === "bot" ? "assistant" : "user",
-    text: message.content,
-    messageType: message.type || "text",
-    satisfaction: message.satisfaction ?? null,
+    id: m.id,
+    persistedId: m.id,
+    conversationId: m.conversation_id,
+    role: m.role === "bot" ? "assistant" : "user",
+    text: m.content,
+    messageType: m.type || "text",
+    satisfaction: m.satisfaction ?? null,
     isLoading: false,
     isError: false,
   };
 }
 
-function normalizeSources(sources) {
-  if (!Array.isArray(sources)) {
-    return [];
-  }
-
-  return sources
-    .filter((source) => typeof source?.url === "string" && source.url.trim())
-    .slice(0, 3);
+function normalizeSources(s) {
+  return Array.isArray(s) ? s.filter(x => x?.url).slice(0, 3) : [];
 }

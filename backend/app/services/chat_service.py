@@ -12,7 +12,18 @@ from backend.app.repositories.persistence_repository import (
     save_bot_message,
     save_user_message,
 )
-from backend.app.services.llm_service import build_answer, build_query_plan, contains_any, normalize_text
+from backend.app.services.llm_service import (
+    build_answer,
+    build_query_plan,
+    contains_any,
+    explicit_operator_requested,
+    fallback_query_plan,
+    human_operator_answer,
+    is_refusal_answer,
+    normalize_language_code,
+    normalize_text,
+    unavailable_answer,
+)
 from backend.app.services.rag_service import (
     QueryPlan,
     RetrievalCandidate,
@@ -87,13 +98,42 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
     planning_message = request.planning_message if request.planning_message else message
     plan = build_query_plan(planning_message, history)
     
-    if request.language:
-        import dataclasses
-        from backend.app.services.llm_service import normalize_language_code
-        plan = dataclasses.replace(plan, response_language=normalize_language_code(request.language))
+    # --- RIGOROUS LANGUAGE DETECTION ---
+    ui_lang = normalize_language_code(request.language) if request.language else "it"
+    detected_lang = plan.response_language
     
+    # HEURISTIC OVERRIDE for short phrases
+    msg_low = message.lower()
+    if detected_lang == "it" and any(word in msg_low for word in ["speak", "talk", "operator", "human", "person", "want", "help"]):
+        detected_lang = "en"
+    
+    # RULE: Spoken language wins over UI flag
+    final_lang = detected_lang if detected_lang != ui_lang else ui_lang
+
+    import dataclasses
+    plan = dataclasses.replace(plan, response_language=final_lang)
+    
+    # NOW perform the check with the finalized final_lang
+    if explicit_operator_requested(message):
+        answer = human_operator_answer(plan.response_language)
+        bot_message_row = save_bot_message(session_id, answer)
+        return ChatResponseDTO(
+            session_id=session_id,
+            conversation_id=conversation_id,
+            user_message_id=user_message_row["id"],
+            bot_message_id=bot_message_row["id"],
+            message_id=bot_message_row["id"],
+            answer=answer,
+            language=plan.response_language, # ALWAYS SEND LANGUAGE
+            sources=[],
+            maps=None,
+            should_escalate=True,
+            needs_email_for_ticket=True,
+            reason="human_operator_requested",
+            ticket_draft=build_ticket_draft(message, plan, "human_operator_requested", []),
+        )
+
     if request.visual_context:
-        import dataclasses
         from backend.app.services.rag_service import PlannedRetrievalQuery
         
         anchored_context = f"{request.visual_context} Giochi del Mediterraneo Taranto 2026 logo emblema mascotte icmg"
@@ -112,31 +152,16 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
     should_escalate, reason = escalation_decision(plan, contexts, candidates)
     answer = build_answer(message, plan, contexts, should_escalate, reason, history)
 
-    # The LLM can signal that the context was irrelevant by adding [NO_CONTEXT]
-    llm_flagged_no_context = "[no_context]" in answer.upper() or "[NO_CONTEXT]" in answer
-    if llm_flagged_no_context:
-        answer = answer.replace("[NO_CONTEXT]", "").replace("[no_context]", "").strip()
+    # IMMEDIATE ESCALATION: If the bot refuses to answer or doesn't know, trigger escalation right away
+    if is_refusal_answer(answer):
+        logger.info("Refusal detected, triggering immediate escalation. Answer: %r", answer[:50])
+        # Switch to the official fallback message if not already using it
+        answer = unavailable_answer(plan.response_language)
+        should_escalate = True
+        reason = "immediate_refusal"
 
     # Only provide sources if we actually have context AND the answer is not a refusal/fallback.
-    normalized_answer = normalize_text(answer)
-    refusal_keywords = [
-        "informazioni sufficienti", 
-        "dato abbastanza preciso", 
-        "non ho informazioni", 
-        "non risultano ancora disponibili",
-        "non sono ancora pubblicati",
-        "non dispongo di informazioni",
-        "i don't have enough information",
-        "non ho un dato",
-        "domanda non e specifica",
-        "indica cosa desideri sapere",
-        "per favore specifica",
-        "non posso rispondere",
-        "non ho dettagli",
-        "servizio e riservato a comunicazioni civili",
-        "posso rispondere solo a domande riguardanti i giochi"
-    ]
-    is_refusal = llm_flagged_no_context or any(kw in normalized_answer for kw in refusal_keywords)
+    is_refusal = is_refusal_answer(answer)
     
     sources = []
     if contexts and not is_refusal:
@@ -167,6 +192,7 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
             if c.maps_url not in mentioned_maps:
                 mentioned_maps.append(c.maps_url)
     
+    maps = None
     if len(mentioned_maps) == 1:
         # Exactly one location mentioned
         maps = mentioned_maps[0]
@@ -177,6 +203,14 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
                 icon_shown = True
             else:
                 s.maps_url = None
+        
+        # Ensure the source with the map is first if it's the only one
+        if icon_shown:
+            map_source = next((s for s in sources if s.maps_url == maps), None)
+            if map_source:
+                sources.remove(map_source)
+                sources.insert(0, map_source)
+
     elif len(mentioned_maps) > 1:
         # Multiple locations mentioned: hide all icons and add suffix
         for s in sources:
@@ -198,9 +232,11 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
         conversation_id=conversation_id,
         user_message_id=user_message_row["id"],
         answer=answer,
+        language=plan.response_language, # POPULATE THE LANGUAGE FIELD
         sources=sources,
         maps=maps,
         should_escalate=should_escalate,
+        needs_email_for_ticket=should_escalate,
         reason=reason,
         ticket_draft=build_ticket_draft(message, plan, reason, contexts)
         if should_escalate
@@ -209,6 +245,7 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
 
     bot_message_row = save_bot_message(session_id, answer)
     response.bot_message_id = bot_message_row["id"]
+    response.message_id = bot_message_row["id"]
 
     logger.info(
         "chat query=%r language=%s intent=%s domains=%s filters=%s retrieved_ids=%s answer_context_ids=%s sources=%s "
@@ -256,23 +293,21 @@ def build_sources(
     contexts: list[RetrievedContext],
     plan: QueryPlan,
 ) -> list[SourceDTO]:
-    from urllib.parse import urlparse
-    
     selected_contexts = sorted(
-        select_source_contexts(contexts, plan),
+        contexts,
         key=lambda context: 0
         if context.source_url and "ta2026.com" in context.source_url
         else 1,
     )
     sources: list[SourceDTO] = []
-    seen_domains: set[str] = set()
+    seen_urls: set[str] = set()
 
     for context in selected_contexts:
         if not context.source_url:
             continue
             
-        domain = urlparse(context.source_url).netloc.lower()
-        if not domain or domain in seen_domains:
+        url = context.source_url.strip().lower()
+        if url in seen_urls:
             continue
             
         sources.append(
@@ -283,8 +318,8 @@ def build_sources(
                 maps_url=context.maps_url,
             )
         )
-        seen_domains.add(domain)
-        if len(sources) == 3:
+        seen_urls.add(url)
+        if len(sources) == 4: # Allow up to 4 sources if unique
             break
     return sources
 
