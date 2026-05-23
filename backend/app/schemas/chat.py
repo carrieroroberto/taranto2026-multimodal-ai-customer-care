@@ -20,6 +20,9 @@ class SourceDTO(BaseModel):
 
 class ChatResponseDTO(BaseModel):
     session_id: str | None = None
+    conversation_id: str | None = None
+    user_message_id: str | None = None
+    bot_message_id: str | None = None
     answer: str
     extracted_text: str | None = None
     sources: list[SourceDTO] = Field(default_factory=list)

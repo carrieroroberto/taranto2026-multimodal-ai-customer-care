@@ -14,7 +14,13 @@ import {
   translations,
   SUPPORTED_LOCALES,
 } from "../i18n.js";
-import { sendChatMessage, sendMultimodalMessage } from "../services/chatApi.js";
+import {
+  fetchConversationMessages,
+  sendChatMessage,
+  sendFeedback,
+  sendMultimodalMessage,
+  startConversation,
+} from "../services/chatApi.js";
 import { getOrCreateSessionId } from "../utils/session.js";
 
 const initialMessages = [
@@ -40,6 +46,44 @@ export function ChatPage() {
   const scrollAnimationFrameRef = useRef(null);
   const localeConfig = getLocaleConfig(locale);
   const t = translations[locale];
+
+  useEffect(() => {
+    let isCancelled = false;
+    const sessionId = sessionIdRef.current;
+
+    async function hydrateConversation() {
+      try {
+        await startConversation({ sessionId });
+        const payload = await fetchConversationMessages({ sessionId });
+        if (isCancelled || !Array.isArray(payload.messages)) {
+          return;
+        }
+
+        const persistedMessages = payload.messages.map(mapPersistedMessage);
+        if (!persistedMessages.length) {
+          return;
+        }
+
+        setMessages((currentMessages) => {
+          const onlyWelcome =
+            currentMessages.length === 1 &&
+            currentMessages[0]?.id === initialMessages[0].id;
+
+          return onlyWelcome
+            ? [initialMessages[0], ...persistedMessages]
+            : currentMessages;
+        });
+      } catch (error) {
+        console.warn("Conversation hydration failed", error);
+      }
+    }
+
+    hydrateConversation();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -188,9 +232,15 @@ export function ChatPage() {
       });
 
       patchMessage(pendingMessage.id, {
+        persistedId: response.bot_message_id || null,
+        conversationId: response.conversation_id || null,
         text: response.answer || t.unavailableAnswer,
         sources: normalizeSources(response.sources),
         isLoading: false,
+      });
+      patchMessage(userMessage.id, {
+        persistedId: response.user_message_id || null,
+        conversationId: response.conversation_id || null,
       });
     } catch (error) {
       if (error.name === "AbortError") return;
@@ -256,9 +306,15 @@ export function ChatPage() {
       });
 
       patchMessage(pendingMessage.id, {
+        persistedId: response.bot_message_id || null,
+        conversationId: response.conversation_id || null,
         text: response.answer || t.unavailableAnswer,
         sources: normalizeSources(response.sources),
         isLoading: false,
+      });
+      patchMessage(userMessage.id, {
+        persistedId: response.user_message_id || null,
+        conversationId: response.conversation_id || null,
       });
     } catch (error) {
       if (error.name === "AbortError") return;
@@ -289,6 +345,27 @@ export function ChatPage() {
 
   function handleLocaleChange(nextLocale) {
     setLocale(nextLocale);
+  }
+
+  async function handleFeedback(message, satisfied) {
+    const messageId = message.persistedId || message.id;
+    if (!messageId || message.isLoading || message.isError) {
+      return;
+    }
+
+    const previousSatisfaction = message.satisfaction;
+    patchMessage(message.id, { satisfaction: satisfied });
+
+    try {
+      await sendFeedback({
+        sessionId: sessionIdRef.current,
+        messageId,
+        satisfied,
+      });
+    } catch (error) {
+      console.warn("Feedback failed", error);
+      patchMessage(message.id, { satisfaction: previousSatisfaction ?? null });
+    }
   }
 
   return (
@@ -336,6 +413,7 @@ export function ChatPage() {
               theme={theme}
               t={t}
               onContentLoad={() => scrollMessagesToBottom("smooth")}
+              onFeedback={handleFeedback}
               onSuggestionClick={handleSend}
             />
             <ChatComposer
@@ -374,7 +452,23 @@ function createMessage(role, text, isLoading = false) {
       `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     role,
     text,
+    persistedId: null,
+    conversationId: null,
+    satisfaction: null,
     isLoading,
+    isError: false,
+  };
+}
+
+function mapPersistedMessage(message) {
+  return {
+    id: message.id,
+    persistedId: message.id,
+    conversationId: message.conversation_id,
+    role: message.role === "bot" ? "assistant" : "user",
+    text: message.content,
+    satisfaction: message.satisfaction ?? null,
+    isLoading: false,
     isError: false,
   };
 }

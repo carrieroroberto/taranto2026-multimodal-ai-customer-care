@@ -14,6 +14,7 @@ export function MessageList({
   theme,
   t,
   onContentLoad,
+  onFeedback,
   onSuggestionClick,
 }) {
   const [previewImage, setPreviewImage] = useState(null);
@@ -34,6 +35,7 @@ export function MessageList({
               t={t}
               onImageOpen={setPreviewImage}
               onContentLoad={onContentLoad}
+              onFeedback={onFeedback}
               onSuggestionClick={onSuggestionClick}
               showSuggestions={!isSending}
               suggestedQuestions={suggestedQuestions}
@@ -57,6 +59,7 @@ function ChatMessage({
   t,
   onImageOpen,
   onContentLoad,
+  onFeedback,
   onSuggestionClick,
   showSuggestions,
   suggestedQuestions,
@@ -136,8 +139,57 @@ function ChatMessage({
             onSuggestionClick={onSuggestionClick}
           />
         ) : null}
+        <MessageFeedback message={message} t={t} onFeedback={onFeedback} />
       </div>
     </article>
+  );
+}
+
+function MessageFeedback({ message, t, onFeedback }) {
+  const canShow =
+    message.role === "assistant" &&
+    !message.translationKey &&
+    !message.isLoading &&
+    !message.isError &&
+    message.persistedId;
+
+  if (!canShow) {
+    return null;
+  }
+
+  return (
+    <div className="message-feedback" aria-label={t.feedbackLabel}>
+      <button
+        className={
+          message.satisfaction === true
+            ? "message-feedback-button is-selected"
+            : "message-feedback-button"
+        }
+        type="button"
+        aria-label={t.feedbackPositive}
+        title={t.feedbackPositive}
+        onClick={() => onFeedback?.(message, true)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M2 21h4V9H2v12Zm20-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L13.17 1 6.59 7.59C6.22 7.95 6 8.45 6 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2Z" />
+        </svg>
+      </button>
+      <button
+        className={
+          message.satisfaction === false
+            ? "message-feedback-button is-selected"
+            : "message-feedback-button"
+        }
+        type="button"
+        aria-label={t.feedbackNegative}
+        title={t.feedbackNegative}
+        onClick={() => onFeedback?.(message, false)}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M22 3h-4v12h4V3ZM2 14c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L10.83 23l6.58-6.59c.37-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2H7c-.83 0-1.54.5-1.84 1.22L2.14 11.27c-.09.23-.14.47-.14.73v2Z" />
+        </svg>
+      </button>
+    </div>
   );
 }
 

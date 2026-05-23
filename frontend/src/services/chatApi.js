@@ -1,5 +1,44 @@
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
 
+export async function startConversation({ sessionId }) {
+  const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/conversations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+    }),
+    timeoutMs: 30000,
+  });
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
+export async function fetchConversationMessages({ sessionId }) {
+  const response = await fetchWithTimeout(
+    `${DEFAULT_API_BASE}/conversations/${encodeURIComponent(sessionId)}/messages`,
+    {
+      method: "GET",
+      timeoutMs: 30000,
+    },
+  );
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
 export async function sendChatMessage({ message, sessionId, language, signal }) {
   const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/chat`, {
     method: "POST",
@@ -13,6 +52,29 @@ export async function sendChatMessage({ message, sessionId, language, signal }) 
     }),
     timeoutMs: 180000,
     signal,
+  });
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
+export async function sendFeedback({ sessionId, messageId, satisfied }) {
+  const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/feedback`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      message_id: messageId,
+      rating: satisfied ? 5 : 1,
+    }),
+    timeoutMs: 30000,
   });
 
   const payload = await parseJsonResponse(response);

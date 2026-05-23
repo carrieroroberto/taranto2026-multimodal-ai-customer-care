@@ -7,6 +7,7 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
 from backend.app.api.routes import router
+from backend.app.repositories.database import init_database
 from backend.app.services.errors import AppServiceError
 from backend.app.services.rag_service import start_knowledge_base_startup_task
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    init_database()
     start_knowledge_base_startup_task()
     yield
 

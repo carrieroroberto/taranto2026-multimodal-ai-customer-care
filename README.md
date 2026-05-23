@@ -11,6 +11,7 @@ Il progetto è una web app full-stack containerizzata con Docker Compose.
 - Frontend React/Vite con Tailwind CSS.
 - Backend FastAPI con endpoint testuali, audio e multimodali.
 - ChromaDB come vector database.
+- Postgres per conversazioni, messaggi, ticket e KPI.
 - Ollama come servizio LLM locale.
 - Modello LLM configurato di default: `qwen3:8b`.
 - Modello embedding configurato di default: `BAAI/bge-m3`.
@@ -67,6 +68,8 @@ Servizi Docker principali:
 | `frontend` | App React/Vite sulla porta `5173` |
 | `backend` | API FastAPI sulla porta `8000` |
 | `vector-db` | ChromaDB sulla porta `8001` |
+| `database` | Postgres sulla porta host `5433` |
+| `pgadmin` | UI grafica per Postgres sulla porta `5050` |
 | `llm` | Ollama per modelli locali |
 | `llm-init` | Pull automatico del modello LLM configurato |
 | `cloudflared` | Tunnel HTTPS temporaneo `trycloudflare.com` |
@@ -131,6 +134,14 @@ Variabili principali:
 | Variabile | Descrizione |
 | --- | --- |
 | `COLLECTION_NAME` | Nome collezione ChromaDB |
+| `POSTGRES_DB` | Nome database Postgres |
+| `POSTGRES_USER` | Utente Postgres |
+| `POSTGRES_PASSWORD` | Password Postgres di sviluppo |
+| `POSTGRES_HOST_PORT` | Porta host per Postgres, di default `5433` |
+| `DATABASE_URL` | URL Postgres per esecuzione backend fuori Docker |
+| `PGADMIN_DEFAULT_EMAIL` | Email di login pgAdmin |
+| `PGADMIN_DEFAULT_PASSWORD` | Password di login pgAdmin |
+| `PGADMIN_HOST_PORT` | Porta host pgAdmin, di default `5050` |
 | `EMBEDDING_MODEL` | Modello embedding |
 | `N_RESULTS` | Numero base di risultati recuperati |
 | `OLLAMA_MODEL` | Modello usato dal backend |
@@ -154,6 +165,23 @@ Aprire da PC:
 - Frontend: <http://localhost:5173>
 - Backend API docs: <http://localhost:8000/docs>
 - ChromaDB: <http://localhost:8001>
+- Postgres: `localhost:5433`
+- pgAdmin: <http://localhost:5050>
+
+Accesso pgAdmin di sviluppo:
+
+- Email: `admin@example.com`
+- Password: `admin123`
+
+Per collegare il database in pgAdmin:
+
+- Host name/address: `database`
+- Port: `5432`
+- Maintenance database: `app`
+- Username: `app`
+- Password: `app`
+
+Se si accede a Postgres da strumenti installati sul PC, usare invece host `localhost` e porta `5433`.
 
 Log utili:
 
@@ -230,6 +258,23 @@ Esempio:
 }
 ```
 
+La risposta include anche gli identificativi persistiti:
+
+- `conversation_id`
+- `user_message_id`
+- `bot_message_id`
+
+Questi ID collegano ogni turno della chat alle tabelle `conversations` e `messages`.
+
+### Conversazioni
+
+```http
+POST /api/conversations
+GET /api/conversations/{session_id}/messages
+```
+
+Il frontend crea o recupera una conversazione usando il `session_id` salvato in `localStorage`. Alla riapertura del browser o della PWA, la stessa sessione viene riutilizzata e i messaggi precedenti vengono ricaricati.
+
 ### Chat Audio
 
 ```http
@@ -263,6 +308,31 @@ Il frontend applica già le combinazioni consentite:
 - testo;
 - testo + immagine;
 - audio.
+
+### Ticket
+
+```http
+POST /api/tickets
+Content-Type: application/json
+```
+
+Il ticket viene salvato in Postgres nella tabella `tickets` e collegato alla conversazione.
+
+### KPI
+
+```http
+GET /api/kpis
+```
+
+Restituisce conteggi aggregati da `conversations`, `messages` e `tickets`, inclusi ticket per stato e feedback positivo/negativo.
+
+### Feedback
+
+```http
+POST /api/feedback
+```
+
+Il feedback aggiorna `messages.satisfaction` sul messaggio bot selezionato: `true` per pollice su, `false` per pollice giu'. Il valore iniziale nel database resta `NULL`.
 
 ## Sviluppo Frontend
 
@@ -300,6 +370,7 @@ Responsabilità principali:
 In Docker il backend comunica con:
 
 - ChromaDB tramite `vector-db:8000`;
+- Postgres tramite `database:5432`;
 - Ollama tramite `llm:11434`.
 
 Per modifiche backend durante lo sviluppo puo' essere necessario riavviare il container:

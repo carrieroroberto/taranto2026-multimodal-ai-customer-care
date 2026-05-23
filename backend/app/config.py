@@ -19,6 +19,10 @@ def env_path(name: str, default: str) -> Path:
 
 @dataclass(frozen=True)
 class Settings:
+    database_url: str = os.getenv(
+        "DATABASE_URL",
+        "postgresql://app:app@localhost:5433/app",
+    )
     chroma_host: str = os.getenv("CHROMA_HOST", "localhost")
     chroma_port: int = int(os.getenv("CHROMA_PORT", "8001"))
     collection_name: str = os.getenv("COLLECTION_NAME", "taranto2026_kb")

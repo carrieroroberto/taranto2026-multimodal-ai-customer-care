@@ -1,11 +1,17 @@
 import logging
 import re
 import time
+import uuid
 from typing import Any
 
 from backend.app.config import settings
 from backend.app.schemas import ChatRequestDTO, ChatResponseDTO, SourceDTO, TicketDraftDTO
-from backend.app.repositories.persistence_repository import get_session_history, save_interaction
+from backend.app.repositories.persistence_repository import (
+    ensure_conversation,
+    get_session_history,
+    save_bot_message,
+    save_user_message,
+)
 from backend.app.services.llm_service import build_answer, build_query_plan, contains_any, normalize_text
 from backend.app.services.rag_service import (
     QueryPlan,
@@ -51,10 +57,12 @@ COMPLAINT_TERMS = ("reclamo", "lamentela", "segnalazione", "oggetto smarrito")
 def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
     started_at = time.perf_counter()
     message = normalize_required_message(request.message)
-    session_id = request.session_id
+    session_id = request.session_id or str(uuid.uuid4())
+    conversation_id = ensure_conversation(session_id=session_id)
 
     # Load history
-    history = get_session_history(session_id) if session_id else []
+    history = get_session_history(session_id)
+    user_message_row = save_user_message(session_id, message)
 
     planning_message = request.planning_message if request.planning_message else message
     plan = build_query_plan(planning_message, history)
@@ -167,6 +175,8 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
     
     response = ChatResponseDTO(
         session_id=session_id,
+        conversation_id=conversation_id,
+        user_message_id=user_message_row["id"],
         answer=answer,
         sources=sources,
         maps=maps,
@@ -177,14 +187,8 @@ def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
         else None,
     )
 
-    # Save interaction
-    if session_id:
-        save_interaction(session_id, {
-            "message": message,
-            "answer": answer,
-            "latency_ms": latency_ms,
-            "intent": plan.intent,
-        })
+    bot_message_row = save_bot_message(session_id, answer)
+    response.bot_message_id = bot_message_row["id"]
 
     logger.info(
         "chat query=%r language=%s intent=%s domains=%s filters=%s retrieved_ids=%s answer_context_ids=%s sources=%s "

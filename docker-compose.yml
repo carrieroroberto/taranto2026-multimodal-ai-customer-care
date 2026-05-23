@@ -12,6 +12,43 @@ services:
       IS_PERSISTENT: "TRUE"
       ANONYMIZED_TELEMETRY: "FALSE"
 
+  database:
+    image: postgres:16-alpine
+    container_name: database
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - database_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER:-app} -d $${POSTGRES_DB:-app}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    ports:
+      - "${PGADMIN_HOST_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    depends_on:
+      database:
+        condition: service_healthy
+
   llm:
     image: ollama/ollama:latest
     container_name: llm
@@ -56,8 +93,12 @@ services:
       dockerfile: Dockerfile
     container_name: backend
     depends_on:
-      - vector-db
-      - llm
+      vector-db:
+        condition: service_started
+      llm:
+        condition: service_started
+      database:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
@@ -84,6 +125,7 @@ services:
       USE_LLM_QUERY_PARSER: ${USE_LLM_QUERY_PARSER:-true}
       QUERY_PARSER_TIMEOUT_SECONDS: ${QUERY_PARSER_TIMEOUT_SECONDS:-150}
       QUERY_PARSER_NUM_PREDICT: ${QUERY_PARSER_NUM_PREDICT:-420}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@database:5432/${POSTGRES_DB:-app}
       HF_HOME: /models/huggingface
       PYTHONPATH: /app
     command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
@@ -141,6 +183,10 @@ volumes:
     name: llm_data
   frontend_node_modules:
     name: frontend_node_modules
+  database_data:
+    name: database_data
+  pgadmin_data:
+    name: pgadmin_data
 
 networks:
   default:

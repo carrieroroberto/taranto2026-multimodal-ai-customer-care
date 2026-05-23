@@ -851,6 +851,49 @@
     color: var(--error-text);
   }
 
+  .message-feedback {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+    margin-left: 0.15rem;
+    opacity: 0.54;
+  }
+
+  .message-feedback-button {
+    display: inline-flex;
+    width: 1.75rem;
+    height: 1.75rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--assistant-bubble-border);
+    border-radius: 999px;
+    background: var(--composer-shell-bg);
+    color: var(--brand-blue);
+    cursor: pointer;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      opacity 160ms ease;
+  }
+
+  .message-feedback-button svg {
+    width: 0.92rem;
+    height: 0.92rem;
+    fill: currentColor;
+  }
+
+  .message-feedback-button:hover {
+    opacity: 0.9;
+  }
+
+  .message-feedback-button.is-selected {
+    border-color: var(--focus-blue);
+    background: rgba(14, 165, 233, 0.14);
+    color: var(--focus-blue);
+    opacity: 1;
+  }
+
   .message-image-button {
     display: block;
     width: var(--message-media-width);
