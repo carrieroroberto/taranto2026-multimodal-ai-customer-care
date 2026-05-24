@@ -1,3 +1,5 @@
+import os
+import uuid
 from typing import Annotated
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
@@ -5,9 +7,9 @@ from backend.app.schemas import ChatRequestDTO, ChatResponseDTO
 from backend.app.services.chat_service import answer_chat
 from backend.app.services.multimodal_service import transcribe_audio, extract_text_from_image, describe_image_vision
 
-
 router = APIRouter(tags=["chat"])
 
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "../../data/uploads")
 
 @router.post("/chat", response_model=ChatResponseDTO)
 def chat_endpoint(request: ChatRequestDTO) -> ChatResponseDTO:
@@ -78,6 +80,27 @@ async def chat_multimodal_endpoint(
         )
         return response
     elif content_type.startswith("image/"):
+        os.makedirs(UPLOADS_DIR, exist_ok=True)
+        # Create a safe unique filename
+        ext = ".png"
+        if "jpeg" in content_type or "jpg" in content_type:
+            ext = ".jpg"
+        elif "webp" in content_type:
+            ext = ".webp"
+        
+        file_id = str(uuid.uuid4())
+        filename = f"{file_id}{ext}"
+        filepath = os.path.join(UPLOADS_DIR, filename)
+        
+        # We need to save the file without consuming the stream or we seek back
+        file.file.seek(0)
+        content = file.file.read()
+        with open(filepath, "wb") as f:
+            f.write(content)
+        file.file.seek(0)
+        
+        image_url = f"/api/uploads/{filename}"
+
         # Combine OCR (text) and Vision (description)
         extracted_text = await extract_text_from_image(file)
         visual_description = await describe_image_vision(file)
@@ -105,6 +128,7 @@ async def chat_multimodal_endpoint(
             user_message,
             extracted_text,
             visual_description,
+            image_url,
         )
         request = ChatRequestDTO(
             message=final_message, 
@@ -128,8 +152,12 @@ def build_image_message_content(
     user_message: str,
     extracted_text: str,
     visual_description: str,
+    image_url: str | None = None,
 ) -> str:
     parts = []
+    if image_url:
+        parts.append(f"[IMAGE_URL:{image_url}]")
+
     if user_message:
         parts.append(user_message)
     else:

@@ -48,6 +48,8 @@ export function ChatPage() {
   const abortControllerRef = useRef(null);
   const scrollAnimationFrameRef = useRef(null);
   
+  const [shouldScroll, setShouldScroll] = useState(true);
+  
   const localeConfig = getLocaleConfig(locale);
   const t = translations[locale] || translations["it"];
 
@@ -123,8 +125,10 @@ export function ChatPage() {
   }, [locale, localeConfig.dir, localeConfig.htmlLang, t.pageTitle]);
 
   useEffect(() => {
-    scrollMessagesToBottom("smooth");
-  }, [messages]);
+    if (shouldScroll) {
+      scrollMessagesToBottom("smooth");
+    }
+  }, [messages, shouldScroll]);
 
   function scrollMessagesToBottom(behavior = "smooth") {
     const messageListElement = messageListRef.current;
@@ -144,6 +148,11 @@ export function ChatPage() {
 
   async function handleSend(message) {
     if (!message || isSending) return;
+    setShouldScroll(true);
+    const detectedLocale = detectMessageLocale(message, locale);
+    if (detectedLocale !== locale) {
+      setLocale(detectedLocale);
+    }
 
     // CASO INVIO EMAIL TICKET
     if (isEscalating) {
@@ -152,17 +161,18 @@ export function ChatPage() {
         const lastBotWithConv = [...messages].reverse().find(m => m.conversationId);
         if (!lastBotWithConv) throw new Error("No conversation found");
 
-        await sendTicket({
+        const ticketResponse = await sendTicket({
           conversationId: lastBotWithConv.conversationId,
           userEmail: message,
-          language: locale
+          language: detectedLocale
         });
 
         // RESET IMMEDIATO STATO ESCALATION
         setIsEscalating(false); 
         
-        // Aggiungi messaggio conferma in chat
-        const successMsg = createMessage("assistant", t.ticketSuccess);
+        // Aggiungi messaggio conferma in chat usando il messaggio dal backend
+        const successText = ticketResponse.message || `${t.ticketSuccess} ${message}`;
+        const successMsg = createMessage("assistant", successText);
         setMessages(prev => [...prev, successMsg]);
       } catch (error) {
         console.error("Ticket submission failed", error);
@@ -187,13 +197,14 @@ export function ChatPage() {
       const response = await sendChatMessage({
         message,
         sessionId: sessionIdRef.current,
-        language: locale,
+        language: detectedLocale,
         signal: controller.signal
       });
 
       patchMessage(pendingMessage.id, {
         persistedId: response.bot_message_id || null,
         conversationId: response.conversation_id || null,
+        feedbackDisabled: Boolean(response.should_escalate || response.needs_email_for_ticket),
         text: response.answer || t.unavailableAnswer,
         sources: normalizeSources(response.sources),
         isLoading: false,
@@ -209,7 +220,9 @@ export function ChatPage() {
         setLocale(response.language);
       }
 
-      if (response.needs_email_for_ticket) {
+      // TRIGGER ESCALATION SE IL BOT NON SA RISPONDERE O SE RICHIESTO DAL BACKEND
+      const isRefusal = isRefusalText(response.answer, t.unavailableAnswer);
+      if (response.needs_email_for_ticket || isRefusal) {
         setIsEscalating(true);
       }
     } catch (error) {
@@ -236,6 +249,10 @@ export function ChatPage() {
 
     const objectUrl = URL.createObjectURL(file);
     const userMessage = createMessage("user", isImage ? trimmedMessage : "");
+    const detectedLocale = trimmedMessage ? detectMessageLocale(trimmedMessage, locale) : locale;
+    if (detectedLocale !== locale) {
+      setLocale(detectedLocale);
+    }
     
     if (isImage) {
       userMessage.messageType = "image";
@@ -261,13 +278,14 @@ export function ChatPage() {
         file,
         message: isImage ? trimmedMessage : undefined,
         sessionId: sessionIdRef.current,
-        language: locale,
+        language: detectedLocale,
         signal: controller.signal
       });
 
       patchMessage(pendingMessage.id, {
         persistedId: response.bot_message_id || null,
         conversationId: response.conversation_id || null,
+        feedbackDisabled: Boolean(response.should_escalate || response.needs_email_for_ticket),
         text: response.answer || t.unavailableAnswer,
         sources: normalizeSources(response.sources),
         isLoading: false,
@@ -308,6 +326,53 @@ export function ChatPage() {
     );
   }
 
+  function detectMessageLocale(text, fallback = "it") {
+    const normalized = String(text || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    if (/[\u0600-\u06ff]/.test(text)) return "ar";
+
+    const tokens = new Set(normalized.match(/[a-z0-9]+/g) || []);
+    const scores = {
+      it: scoreLanguage(tokens, normalized, [
+        "ciao", "salve", "buongiorno", "buonasera", "voglio", "vorrei", "posso",
+        "puoi", "potresti", "devo", "serve", "aiuto", "dove", "quando", "quanto",
+        "quale", "quali", "chi", "che", "cosa", "come", "trovo", "trova", "sono", "sei",
+        "perche", "un", "una", "il", "lo", "la", "tabella", "lingua", "messaggio", "risposta", "sempre",
+        "dovrebbe", "selezionata", "risolvi", "problema", "biglietti",
+        "operatore", "parlare", "mandato", "inviato", "appena", "italiano",
+      ]),
+      en: scoreLanguage(tokens, normalized, [
+        "hello", "hi", "please", "want", "would", "could", "can", "where",
+        "when", "what", "which", "who", "how", "why", "is", "are", "ticket", "tickets", "operator",
+        "speak", "talk", "help", "english",
+      ]),
+      es: scoreLanguage(tokens, normalized, [
+        "hola", "quiero", "quisiera", "puedo", "puedes", "donde", "cuando",
+        "que", "quien", "quienes", "cual", "como", "es", "son", "entradas", "operador", "hablar", "espanol",
+      ]),
+      fr: scoreLanguage(tokens, normalized, [
+        "bonjour", "salut", "veux", "voudrais", "peux", "pouvez", "quand",
+        "quoi", "qui", "quel", "quelle", "comment", "pourquoi", "est", "sont", "billets", "operateur", "parler",
+        "francais",
+      ]),
+    };
+
+    const [localeEntry, score] = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+    return score > 0 ? localeEntry : fallback;
+  }
+
+  function scoreLanguage(tokens, normalized, markers) {
+    return markers.reduce((score, marker) => {
+      if (marker.includes(" ")) {
+        return normalized.includes(marker) ? score + 2 : score;
+      }
+      return tokens.has(marker) ? score + 1 : score;
+    }, 0);
+  }
+
   function handleThemeToggle() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }
@@ -318,15 +383,31 @@ export function ChatPage() {
 
   async function handleFeedback(message, satisfied) {
     const mId = message.persistedId || message.id;
-    if (!mId || message.isLoading || message.isError) return;
+    if (
+      !mId ||
+      message.isLoading ||
+      message.isError ||
+      isSending ||
+      isSendingTicket ||
+      message.satisfaction === satisfied
+    ) {
+      return;
+    }
 
+    // Disabilitiamo lo scroll automatico prima di aggiornare i messaggi per evitare sbalzi
+    setShouldScroll(false);
+
+    const previousSatisfaction = message.satisfaction;
     patchMessage(message.id, { satisfaction: satisfied });
 
     try {
       await sendFeedback({ sessionId: sessionIdRef.current, messageId: mId, satisfied });
       
-      // ESCALATION SU FEEDBACK NEGATIVO
-      if (satisfied === false) {
+      // ESCALATION SU FEEDBACK NEGATIVO - Solo se è l'ultimo messaggio bot
+      const assistantMessages = messages.filter(m => m.role === "assistant" && !m.translationKey);
+      const isLatestBotMessage = assistantMessages.length > 0 && assistantMessages[assistantMessages.length - 1].id === message.id;
+
+      if (satisfied === false && isLatestBotMessage) {
         setIsEscalating(true);
         const apologyText = locale === "it" 
           ? "Mi dispiace che la risposta non sia stata soddisfacente. Se desideri, inserisci la tua email qui sotto per essere ricontattato da un operatore umano."
@@ -334,10 +415,23 @@ export function ChatPage() {
           
         const apologyMsg = createMessage("assistant", apologyText);
         apologyMsg.conversationId = message.conversationId;
+        apologyMsg.feedbackSupportFor = message.id;
         setMessages(prev => [...prev, apologyMsg]);
+        // Se scatta l'escalation, allora torniamo a scrollare verso il basso
+        setShouldScroll(true);
+      } else if (previousSatisfaction === false && satisfied === true) {
+        // Se l'utente cambia da pollice giù a pollice su, chiudi l'escalation se era legata a questo messaggio
+        // Ma NON chiudere se l'escalation è stata innescata da un altro motivo (es. richiesta esplicita)
+        if (messages.find(m => m.feedbackSupportFor === message.id)) {
+           setIsEscalating(false);
+           setMessages(prev =>
+             prev.filter(existingMessage => existingMessage.feedbackSupportFor !== message.id),
+           );
+        }
       }
     } catch (e) {
       console.warn(e);
+      patchMessage(message.id, { satisfaction: previousSatisfaction });
     }
   }
 
@@ -361,7 +455,9 @@ export function ChatPage() {
           <section className="chat-shell flex h-full w-full flex-col overflow-hidden">
             <ChatHeader t={t} />
             <MessageList
-              isSending={isSending}
+              feedbackCanCorrectNegative={true}
+              feedbackDisabled={isSending || isSendingTicket}
+              isSending={isSending || isSendingTicket}
               messages={messages}
               listRef={messageListRef}
               suggestedQuestions={t.welcomeSuggestions || []}
@@ -408,19 +504,126 @@ function createMessage(role, text, isLoading = false) {
 }
 
 function mapPersistedMessage(m) {
+  let text = m.content || "";
+  let image = undefined;
+  
+  // Se è un'immagine ricaricata dal DB, estraiamo l'URL se presente e puliamo il testo
+  if (m.type === "image") {
+    // Estrai l'URL dell'immagine se è stato salvato
+    const urlMatch = text.match(/\[IMAGE_URL:(.*?)\]/);
+    if (urlMatch) {
+      image = urlMatch[1];
+      // Rimuovi il tag URL dal testo testuale
+      text = text.replace(urlMatch[0], "").trim();
+    }
+
+    const originalMessageMatch = text.split("\nDescrizione immagine:")[0];
+    const userPrompt = originalMessageMatch.replace("Immagine inviata dall'utente.", "").trim();
+    text = userPrompt;
+    
+    // Se per vecchi messaggi non abbiamo salvato l'immagine, mettiamo un placeholder testuale
+    if (!image && !text) {
+      text = "📸 [Immagine inviata]";
+    }
+  }
+
   return {
     id: m.id,
     persistedId: m.id,
     conversationId: m.conversation_id,
     role: m.role === "bot" ? "assistant" : "user",
-    text: m.content,
+    text,
+    image,
     messageType: m.type || "text",
     satisfaction: m.satisfaction ?? null,
+    feedbackDisabled: isEscalationText(text),
     isLoading: false,
     isError: false,
   };
 }
 
+function isRefusalText(text, fallbackText) {
+  if (!text) return false;
+  if (text === fallbackText) return true;
+  
+  const normalized = String(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+    
+  return (
+    normalized.includes("non ho un dato abbastanza preciso") ||
+    normalized.includes("preparare una richiesta per un operatore") ||
+    normalized.includes("non ho informazioni") ||
+    normalized.includes("canale ufficiale") ||
+    normalized.includes("non sono in grado di rispondere") ||
+    normalized.includes("i don't have enough precise data") ||
+    normalized.includes("prepare a request for an operator")
+  );
+}
+
 function normalizeSources(s) {
   return Array.isArray(s) ? s.filter(x => x?.url).slice(0, 3) : [];
+}
+
+function isEscalationText(text) {
+  const normalized = String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return (
+    normalized.includes("non ho un dato abbastanza preciso") ||
+    normalized.includes("preparare una richiesta per un operatore") ||
+    normalized.includes("inserisci l'email") ||
+    normalized.includes("enter your email") ||
+    normalized.includes("ingresa tu correo") ||
+    normalized.includes("saisissez votre e-mail")
+  );
+}
+
+function detectMessageLocale(text, fallback = "it") {
+  const normalized = String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (/[\u0600-\u06ff]/.test(text)) return "ar";
+
+  const tokens = new Set(normalized.match(/[a-z0-9]+/g) || []);
+  const scores = {
+    it: scoreLanguage(tokens, normalized, [
+      "ciao", "salve", "buongiorno", "buonasera", "voglio", "vorrei", "posso",
+      "puoi", "potresti", "devo", "serve", "aiuto", "dove", "quando", "quanto",
+      "quale", "quali", "chi", "che", "cosa", "come", "trovo", "trova", "sono", "sei",
+      "perche", "un", "una", "il", "lo", "la", "tabella", "lingua", "messaggio", "risposta", "sempre",
+      "dovrebbe", "selezionata", "risolvi", "problema", "biglietti",
+      "operatore", "parlare", "mandato", "inviato", "appena", "italiano",
+    ]),
+    en: scoreLanguage(tokens, normalized, [
+      "hello", "hi", "please", "want", "would", "could", "can", "where",
+      "when", "what", "which", "who", "how", "why", "is", "are", "ticket", "tickets", "operator",
+      "speak", "talk", "help", "english",
+    ]),
+    es: scoreLanguage(tokens, normalized, [
+      "hola", "quiero", "quisiera", "puedo", "puedes", "donde", "cuando",
+      "que", "quien", "quienes", "cual", "como", "es", "son", "entradas", "operador", "hablar", "espanol",
+    ]),
+    fr: scoreLanguage(tokens, normalized, [
+      "bonjour", "salut", "veux", "voudrais", "peux", "pouvez", "quand",
+      "quoi", "qui", "quel", "quelle", "comment", "pourquoi", "est", "sont", "billets", "operateur", "parler",
+      "francais",
+    ]),
+  };
+
+  const [locale, score] = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  return score > 0 ? locale : fallback;
+}
+
+function scoreLanguage(tokens, normalized, markers) {
+  return markers.reduce((score, marker) => {
+    if (marker.includes(" ")) {
+      return normalized.includes(marker) ? score + 2 : score;
+    }
+    return tokens.has(marker) ? score + 1 : score;
+  }, 0);
 }

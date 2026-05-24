@@ -6,6 +6,8 @@ import { ImageLightbox } from "./ImageLightbox.jsx";
 const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
 
 export function MessageList({
+  feedbackCanCorrectNegative = false,
+  feedbackDisabled = false,
   isSending,
   messages,
   listRef,
@@ -35,6 +37,8 @@ export function MessageList({
               t={t}
               onImageOpen={setPreviewImage}
               onContentLoad={onContentLoad}
+              feedbackCanCorrectNegative={feedbackCanCorrectNegative}
+              feedbackDisabled={feedbackDisabled}
               onFeedback={onFeedback}
               onSuggestionClick={onSuggestionClick}
               showSuggestions={!isSending}
@@ -59,6 +63,8 @@ function ChatMessage({
   t,
   onImageOpen,
   onContentLoad,
+  feedbackCanCorrectNegative,
+  feedbackDisabled,
   onFeedback,
   onSuggestionClick,
   showSuggestions,
@@ -139,26 +145,36 @@ function ChatMessage({
             onSuggestionClick={onSuggestionClick}
           />
         ) : null}
-        <MessageFeedback message={message} t={t} onFeedback={onFeedback} />
+        <MessageFeedback
+          disabled={feedbackDisabled}
+          message={message}
+          t={t}
+          onFeedback={onFeedback}
+        />
       </div>
     </article>
   );
 }
 
-function MessageFeedback({ message, t, onFeedback }) {
+function MessageFeedback({ disabled, message, t, onFeedback }) {
   const canShow =
     message.role === "assistant" &&
     !message.translationKey &&
     !message.isLoading &&
     !message.isError &&
+    !message.feedbackDisabled &&
     message.persistedId;
 
   if (!canShow) {
     return null;
   }
 
+  // Se 'disabled' è true, aggiungiamo la classe 'is-disabled' che grigisce tutto
+  const containerClassName = disabled ? "message-feedback is-disabled" : "message-feedback";
+
   return (
-    <div className="message-feedback" aria-label={t.feedbackLabel}>
+    <div className={containerClassName} aria-label={t.feedbackLabel}>
+      <span className="feedback-helpful-text">{t.feedbackHelpful}</span>
       <button
         className={
           message.satisfaction === true
@@ -168,6 +184,7 @@ function MessageFeedback({ message, t, onFeedback }) {
         type="button"
         aria-pressed={message.satisfaction === true}
         aria-label={t.feedbackPositive}
+        disabled={disabled}
         title={t.feedbackPositive}
         onClick={() => onFeedback?.(message, true)}
       >
@@ -184,6 +201,7 @@ function MessageFeedback({ message, t, onFeedback }) {
         type="button"
         aria-pressed={message.satisfaction === false}
         aria-label={t.feedbackNegative}
+        disabled={disabled}
         title={t.feedbackNegative}
         onClick={() => onFeedback?.(message, false)}
       >
@@ -250,8 +268,24 @@ function TextWithInlineSources({ className, sources, text }) {
 }
 
 function SourceFavicons({ sources }) {
+  const mapSources = uniqueMapSources(sources);
+
   return (
     <span className="source-favicons" aria-label="Sorgenti consultate">
+      {mapSources.map((source, index) => (
+        <a
+          key={`${source.maps_url}-${index}`}
+          className="source-maps-link"
+          href={source.maps_url}
+          target="_blank"
+          rel="noreferrer"
+          title="Apri in Google Maps"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+          </svg>
+        </a>
+      ))}
       {sources.map((source, index) => (
         <span key={`${source.url}-${index}`} className="source-favicon-group">
           <a
@@ -271,19 +305,6 @@ function SourceFavicons({ sources }) {
               }}
             />
           </a>
-          {source.maps_url && (
-            <a
-              className="source-maps-link"
-              href={source.maps_url}
-              target="_blank"
-              rel="noreferrer"
-              title="Apri in Google Maps"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
-              </svg>
-            </a>
-          )}
         </span>
       ))}
     </span>
@@ -301,9 +322,49 @@ function getVisibleSources(message, isUser) {
     return [];
   }
 
-  return message.sources
-    .filter((source) => typeof source?.url === "string" && source.url.trim())
-    .slice(0, 3);
+  const visibleSources = [];
+  const seenSources = new Set();
+  for (const source of message.sources) {
+    if (typeof source?.url !== "string" || !source.url.trim()) {
+      continue;
+    }
+    const key = canonicalSourceKey(source.url);
+    if (seenSources.has(key)) {
+      continue;
+    }
+    seenSources.add(key);
+    visibleSources.push(source);
+    if (visibleSources.length === 3) {
+      break;
+    }
+  }
+  return visibleSources;
+}
+
+function canonicalSourceKey(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return String(url).trim().toLowerCase().replace(/\/+$/, "");
+  }
+}
+
+function uniqueMapSources(sources) {
+  const uniqueSources = [];
+  const seenMaps = new Set();
+  for (const source of sources) {
+    if (!source?.maps_url) {
+      continue;
+    }
+    const key = String(source.maps_url).trim().toLowerCase();
+    if (seenMaps.has(key)) {
+      continue;
+    }
+    seenMaps.add(key);
+    uniqueSources.push(source);
+  }
+  return uniqueSources;
 }
 
 function getFaviconUrl(url) {

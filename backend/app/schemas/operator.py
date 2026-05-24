@@ -20,5 +20,10 @@ class LoginResponseDTO(BaseModel):
     operator: OperatorDTO
 
 
+class LogoutResponseDTO(BaseModel):
+    status: str = "ok"
+    message: str
+
+
 class TicketStatusUpdateDTO(BaseModel):
     status: Literal["open", "in_progress", "closed"]

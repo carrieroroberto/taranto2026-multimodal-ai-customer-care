@@ -336,6 +336,11 @@ def planned_retrieval_queries(plan: QueryPlan) -> list[PlannedRetrievalQuery]:
             for query in [plan.retrieval_query, *plan.expanded_queries]
             if query.strip()
         ]
+    
+    # Always include a high-level general query for general intents to ensure sources are found
+    if plan.intent in {"general_information", "participation"} or not queries:
+        queries.append(PlannedRetrievalQuery(query="Giochi del Mediterraneo Taranto 2026 informazioni generali", domain="general", weight=0.8))
+
     return deduplicate_planned_queries(queries) or [
         PlannedRetrievalQuery(query=plan.original_query, domain=None, weight=1.0)
     ]

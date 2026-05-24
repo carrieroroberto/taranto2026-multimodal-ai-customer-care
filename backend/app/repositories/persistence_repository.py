@@ -1,3 +1,4 @@
+import re
 import uuid
 from typing import Any
 
@@ -315,6 +316,20 @@ def update_ticket_status(ticket_id: str, status: str) -> dict[str, Any] | None:
     return stringify_ids(dict(row)) if row else None
 
 
+def update_conversation_summary(conversation_id: str, summary: str) -> None:
+    resolved_id = conversation_uuid(conversation_id)
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE conversations
+                SET ai_summary = %s
+                WHERE id = %s
+                """,
+                (summary, resolved_id),
+            )
+
+
 def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
     user_email = ticket_data.get("user_email") or ticket_data.get("contact_email")
     if not user_email:
@@ -339,16 +354,19 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
     priority = ticket_data.get("priority")
     domain = ticket_data.get("domain") or ticket_data.get("category")
     translated_message = ticket_data.get("translated_message")
+    ai_summary = str(ticket_data.get("ai_summary") or summary or original_message).strip()
+    if not ai_summary:
+        ai_summary = "Richiesta inviata all'operatore senza dettagli aggiuntivi."
 
     with connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO conversations (id)
-                VALUES (%s)
-                ON CONFLICT (id) DO NOTHING
+                INSERT INTO conversations (id, ai_summary)
+                VALUES (%s, %s)
+                ON CONFLICT (id) DO UPDATE SET ai_summary = EXCLUDED.ai_summary
                 """,
-                (conversation_id,),
+                (conversation_id, ai_summary),
             )
             cursor.execute(
                 """
@@ -359,12 +377,13 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
                     domain,
                     user_email,
                     summary,
+                    ai_summary,
                     original_message,
                     translated_message
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id, conversation_id, status, priority, domain, user_email,
-                    summary, original_message, translated_message, created_at
+                    summary, ai_summary, original_message, translated_message, created_at
                 """,
                 (
                     conversation_id,
@@ -373,6 +392,7 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
                     domain,
                     user_email,
                     summary,
+                    ai_summary,
                     original_message,
                     translated_message,
                 ),
@@ -380,6 +400,135 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
             row = cursor.fetchone()
 
     return stringify_ids(dict(row))
+
+
+MOBILITY_TERMS = (
+    "kyma",
+    "mobilita",
+    "mobility",
+    "trasport",
+    "transport",
+    "autobus",
+    "bus",
+    "navetta",
+    "shuttle",
+    "treno",
+    "train",
+    "parcheggio",
+    "parking",
+    "fermata",
+)
+
+
+def sync_kb_sources(records: list[dict[str, Any]]) -> int:
+    if not records:
+        return 0
+
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            for record in records:
+                metadata = record.get("metadata") or {}
+                kb_type = str(metadata.get("type") or "general").strip() or "general"
+                title = str(metadata.get("title") or "").strip() or None
+                source_url = str(metadata.get("source_url") or "").strip() or None
+                document = str(record.get("document") or "")
+                search_text = " ".join(
+                    part
+                    for part in (
+                        str(record.get("id") or ""),
+                        kb_type,
+                        title or "",
+                        source_url or "",
+                        document,
+                    )
+                    if part
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO kb_sources (
+                        id,
+                        kb_type,
+                        domain_label,
+                        title,
+                        source_url,
+                        is_kyma_mobility,
+                        search_text,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, clock_timestamp())
+                    ON CONFLICT (id) DO UPDATE SET
+                        kb_type = EXCLUDED.kb_type,
+                        domain_label = EXCLUDED.domain_label,
+                        title = EXCLUDED.title,
+                        source_url = EXCLUDED.source_url,
+                        is_kyma_mobility = EXCLUDED.is_kyma_mobility,
+                        search_text = EXCLUDED.search_text,
+                        updated_at = clock_timestamp()
+                    """,
+                    (
+                        str(record["id"]),
+                        kb_type,
+                        kb_type,
+                        title,
+                        source_url,
+                        source_mentions_mobility(search_text),
+                        search_text,
+                    ),
+                )
+
+            cursor.execute("TRUNCATE kb_source_domains")
+            cursor.execute(
+                """
+                INSERT INTO kb_source_domains (
+                    label,
+                    source_count,
+                    kyma_mobility_count,
+                    updated_at
+                )
+                SELECT
+                    domain_label,
+                    COUNT(*)::int,
+                    COUNT(*) FILTER (WHERE is_kyma_mobility)::int,
+                    clock_timestamp()
+                FROM kb_sources
+                GROUP BY domain_label
+                """
+            )
+
+    return len(records)
+
+
+def source_mentions_mobility(text: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", text.lower())
+    tokens = set(normalized.split())
+    return any(
+        term in tokens if len(term) <= 4 else term in normalized
+        for term in MOBILITY_TERMS
+    )
+
+
+def get_kb_source_domains() -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT label, source_count, kyma_mobility_count
+        FROM kb_source_domains
+        ORDER BY label ASC
+        """
+    )
+    return [dict(row) for row in rows]
+
+
+def get_kb_sources_for_triage(limit: int = 4000) -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT id, domain_label, title, source_url, is_kyma_mobility, search_text
+        FROM kb_sources
+        ORDER BY is_kyma_mobility DESC, domain_label ASC, id ASC
+        LIMIT %s
+        """,
+        (max(limit, 1),),
+    )
+    return [dict(row) for row in rows]
 
 
 def get_kpi_summary() -> dict[str, Any]:

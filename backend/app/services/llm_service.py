@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 from backend.app.config import settings
 from backend.app.services.rag_service import PlannedRetrievalQuery, QueryPlan, RetrievedContext
-
+from backend.app.services import transport_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,35 @@ VALID_INTENTS = {
     "participation",
 }
 
-ENTITY_KEYS = ("discipline", "venue", "city", "date", "item")
+ENTITY_KEYS = ("discipline", "venue", "city", "date", "item", "transport_stop")
+
+ITALIAN_MARKERS = {
+    "ciao", "salve", "buongiorno", "buonasera", "voglio", "vorrei", "posso",
+    "puoi", "potresti", "devo", "serve", "aiuto", "dove", "quando", "quanto", "quale",
+    "quali", "chi", "che", "cosa", "come", "trovo", "trova", "sono", "sei", "perche", "per",
+    "con", "nel", "nella", "degli", "delle", "un", "una", "il", "lo", "la", "tabella", "lingua", "messaggio",
+    "risposta", "sempre", "dovrebbe", "selezionata", "risolvi", "problema",
+    "biglietti", "operatore", "parlare", "mandato", "inviato", "appena",
+    "rispondi", "italiano",
+}
+
+ENGLISH_MARKERS = {
+    "hello", "hi", "please", "want", "would", "could", "can", "where",
+    "when", "what", "which", "who", "how", "why", "is", "are", "ticket", "tickets", "operator",
+    "speak", "talk", "help", "english",
+}
+
+SPANISH_MARKERS = {
+    "hola", "quiero", "quisiera", "puedo", "puedes", "donde", "cuando",
+    "que", "quien", "quienes", "cual", "como", "por", "para", "es", "son", "entradas", "operador", "hablar",
+    "espanol",
+}
+
+FRENCH_MARKERS = {
+    "bonjour", "salut", "veux", "voudrais", "peux", "pouvez", "ou",
+    "quand", "quoi", "qui", "quel", "quelle", "comment", "pourquoi", "est", "sont", "billets", "operateur",
+    "parler", "francais",
+}
 
 LANGUAGE_NAMES = {
     "it": "Italiano",
@@ -52,6 +80,33 @@ LANGUAGE_NAMES = {
     "es": "Español",
     "ar": "العربية",
 }
+
+def detect_message_language(message: str, fallback: str = "it") -> str:
+    text = (message or "").strip()
+    normalized = normalize_text(text)
+    if not normalized:
+        return normalize_language_code(fallback)
+
+    if re.search(r"[\u0600-\u06ff]", text):
+        return "ar"
+
+    tokens = set(normalized.split())
+    scores = {
+        "it": language_score(tokens, normalized, ITALIAN_MARKERS),
+        "en": language_score(tokens, normalized, ENGLISH_MARKERS),
+        "es": language_score(tokens, normalized, SPANISH_MARKERS),
+        "fr": language_score(tokens, normalized, FRENCH_MARKERS),
+    }
+    best_language, best_score = max(scores.items(), key=lambda item: item[1])
+    if best_score <= 0:
+        return normalize_language_code(fallback)
+    return best_language
+
+def language_score(tokens: set[str], normalized: str, markers: set[str]) -> int:
+    score = sum(1 for token in tokens if token in markers)
+    score += sum(2 for marker in markers if " " in marker and marker in normalized)
+    return score
+
 
 QUERY_PLAN_SYSTEM_PROMPT = """
 Sei un analista esperto per i Giochi del Mediterraneo Taranto 2026.
@@ -92,6 +147,51 @@ Sei un traduttore esperto. Traduci il testo fornito nella lingua richiesta mante
 Non aggiungere commenti, rispondi solo con la traduzione.
 """
 
+SUMMARY_SYSTEM_PROMPT = """
+Sei un assistente esperto nel riassumere conversazioni di assistenza clienti.
+Il tuo compito è creare un riassunto sintetico e professionale dell'intera conversazione fornita.
+Il riassunto deve essere in LINGUA ITALIANA.
+Focus: problema principale dell'utente, eventuali dati forniti e stato della richiesta.
+Rispondi solo con il riassunto, senza preamboli o commenti.
+"""
+
+def generate_conversation_summary(history: list[dict[str, Any]]) -> str:
+    if not history:
+        return "Nessuna conversazione disponibile."
+
+    formatted_history = "\n".join(
+        f"{'Utente' if h['role'] == 'user' else 'Bot'}: {h['content']}"
+        for h in history
+    )
+
+    payload = {
+        "model": settings.ollama_model,
+        "messages": [
+            {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Conversazione da riassumere:\n\n{formatted_history}"
+            },
+        ],
+        "stream": False,
+        "think": False,
+        "options": {
+            "temperature": 0.3,
+            "num_predict": 250,
+            "num_ctx": 4096,
+        },
+    }
+    
+    try:
+        response = call_ollama(payload)
+        summary = response.get("message", {}).get("content") or response.get("response")
+        if not summary:
+            return "Impossibile generare il riassunto."
+        return strip_thinking(summary).strip()
+    except Exception as exc:
+        logger.error("Error generating conversation summary: %s", exc)
+        return "Errore durante la generazione del riassunto."
+
 def build_query_plan(message: str, history: list[dict[str, Any]] | None = None) -> QueryPlan:
     history_context = ""
     if history:
@@ -106,9 +206,10 @@ def build_query_plan(message: str, history: list[dict[str, Any]] | None = None) 
             {"role": "user", "content": f"{history_context}Domanda utente: {message}"},
         ],
         "stream": False,
+        "think": False,
         "options": {
             "temperature": 0,
-            "num_predict": 400,
+            "num_predict": max(settings.query_parser_num_predict, 1024),
         },
     }
 
@@ -119,6 +220,10 @@ def build_query_plan(message: str, history: list[dict[str, Any]] | None = None) 
         
         return QueryPlan(
             original_query=message,
+            retrieval_query=message,
+            domain=normalize_domains(plan_data.get("domains"), "general")[0],
+            filters=[],
+            expanded_queries=[message],
             intent=normalize_intent(plan_data.get("intent")),
             domains=normalize_domains(plan_data.get("domains"), "general"),
             retrieval_queries=parse_retrieval_queries(
@@ -138,14 +243,15 @@ def fallback_query_plan(message: str) -> QueryPlan:
     return QueryPlan(
         original_query=message,
         retrieval_query=message,
-        intent="general_information",
         domain="general",
+        filters=[],
+        expanded_queries=[message],
+        intent="general_information",
         domains=["general"],
         retrieval_queries=[PlannedRetrievalQuery(query=message, domain=None, weight=1.0)],
         entities={k: None for k in ENTITY_KEYS},
         response_language="it",
-        expanded_queries=[message],
-        filters=[],
+        needs_clarification=False,
     )
 
 
@@ -208,6 +314,7 @@ def build_answer(
         answer = ticketing_guardrail_answer(plan.response_language)
     else:
         prompt = build_user_prompt(message, plan, contexts, history)
+        logger.info("FINAL PROMPT:\n%s", prompt)
         answer = generate_grounded_answer(prompt, plan.response_language)
         answer = ensure_calendar_completeness(answer, message, plan, contexts)
         answer = enforce_ticketing_guardrail(answer, plan, contexts)
@@ -334,6 +441,10 @@ def build_user_prompt(
 
     filters = ", ".join(plan.filters) if plan.filters else "nessuno"
     language_name = response_language_name(plan.response_language)
+    
+    transport_context = transport_service.get_transport_context(plan)
+    transport_section = transport_context if transport_context else ""
+    
     return (
         f"{history_text}"
         "Domanda utente:\n"
@@ -344,6 +455,7 @@ def build_user_prompt(
         f"{filters}\n\n"
         "Informazioni disponibili:\n"
         + "\n\n".join(context_blocks)
+        + f"{transport_section}"
         + "\n\nIstruzioni di risposta:\n"
         "- usa solo le informazioni disponibili qui sopra;\n"
         "- considera i blocchi in ordine di rilevanza e usa solo quelli che rispondono davvero alla domanda;\n"
@@ -351,6 +463,10 @@ def build_user_prompt(
         "- se il dato richiesto e' presente, rispondi solo a quel dato senza aggiungere limitazioni o dati mancanti non richiesti;\n"
         "- se usi un blocco ticketing che indica dati non pubblicati, non dire che l'evento e' gratuito o che non serve biglietto;\n"
         "- se la domanda chiede sia sede sia date, incrocia tutti i record pertinenti e indica sede, citta, date e fasi disponibili;\n"
+        "- se la domanda riguarda mobilita, pullman, bus, fermate, parcheggi o come arrivare, usa PRIMA la sezione 'INFORMAZIONI TRASPORTI (SQL DB)' se presente, altrimenti usa i dati del blocco della sede;\n"
+        "- collega sempre le informazioni di trasporto ai Giochi del Mediterraneo Taranto 2026, spiegando come raggiungere le sedi di gara o i punti di interesse dell'evento;\n"
+        "- per le domande sulle linee bus e orari fai ESCLUSIVO affidamento alla sezione 'INFORMAZIONI TRASPORTI (SQL DB)', elencando fermate, linee e orari esatti trovati (che sono sincronizzati con l'orario attuale);\n"
+        "- se mancano informazioni essenziali per rispondere (es. punto di partenza per un percorso), chiedi gentilmente all'utente di specificarle nel contesto della sua visita ai Giochi;\n"
         "- non omettere nessuna data o fase riportata nelle righe 'Date e fasi';\n"
         "- se ci sono piu sedi per la stessa disciplina, sintetizzale senza scegliere solo la prima;\n"
         f"- rispondi in {language_name}, la stessa lingua della domanda originale;\n"
@@ -699,7 +815,9 @@ def call_ollama(
         raise DependencyServiceError(f"Ollama returned invalid JSON: {exc}") from exc
 
 
-def parse_json_object(value: str) -> dict[str, Any]:
+def parse_json_object(value: str | None) -> dict[str, Any]:
+    if not value:
+        raise ValueError("Cannot parse empty JSON.")
     cleaned = strip_thinking(value).strip()
     match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
     if not match:
@@ -710,7 +828,9 @@ def parse_json_object(value: str) -> dict[str, Any]:
     return parsed
 
 
-def strip_thinking(value: str) -> str:
+def strip_thinking(value: str | None) -> str:
+    if not value:
+        return ""
     return re.sub(r"<think>.*?</think>", "", value, flags=re.DOTALL | re.IGNORECASE)
 
 

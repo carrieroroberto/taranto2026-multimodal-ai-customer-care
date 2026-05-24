@@ -854,10 +854,23 @@
   .message-feedback {
     display: inline-flex;
     align-items: center;
-    gap: 0.42rem;
+    gap: 0.5rem;
     margin-top: 0.46rem;
     margin-left: 0.15rem;
-    opacity: 0.58;
+    opacity: 0.8;
+  }
+
+  .message-feedback.is-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    filter: grayscale(1);
+  }
+
+  .feedback-helpful-text {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    margin-right: 0.15rem;
+    font-weight: 500;
   }
 
   .message-feedback-button {

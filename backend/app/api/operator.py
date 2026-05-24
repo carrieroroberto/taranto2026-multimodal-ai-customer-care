@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from backend.app.repositories.persistence_repository import (
     get_operator_by_email,
@@ -11,6 +11,7 @@ from backend.app.repositories.persistence_repository import (
 )
 from backend.app.schemas.operator import (
     LoginResponseDTO,
+    LogoutResponseDTO,
     OperatorDTO,
     OperatorLoginRequestDTO,
     TicketStatusUpdateDTO,
@@ -19,12 +20,15 @@ from backend.app.services.auth_service import create_access_token, decode_access
 
 
 router = APIRouter(prefix="/operator", tags=["operator"])
+auth_router = APIRouter(tags=["auth"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/operator/login")
+bearer_scheme = HTTPBearer()
 
 
-async def get_current_operator(token: Annotated[str, Depends(oauth2_scheme)]):
-    payload = decode_access_token(token)
+async def get_current_operator(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+):
+    payload = decode_access_token(credentials.credentials)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -44,8 +48,7 @@ async def get_current_operator(token: Annotated[str, Depends(oauth2_scheme)]):
     return operator
 
 
-@router.post("/login", response_model=LoginResponseDTO)
-async def login(request: OperatorLoginRequestDTO):
+def authenticate_operator(request: OperatorLoginRequestDTO) -> LoginResponseDTO:
     operator = get_operator_by_email(request.email)
     if not operator or not verify_password(request.password, operator["password_hash"]):
         raise HTTPException(
@@ -55,14 +58,42 @@ async def login(request: OperatorLoginRequestDTO):
         )
     
     access_token = create_access_token(data={"sub": operator["email"]})
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "operator": {
+    return LoginResponseDTO(
+        access_token=access_token,
+        token_type="bearer",
+        operator={
             "id": str(operator["id"]),
             "email": operator["email"]
-        }
-    }
+        },
+    )
+
+
+@auth_router.post("/login", response_model=LoginResponseDTO)
+async def root_login(request: OperatorLoginRequestDTO):
+    return authenticate_operator(request)
+
+
+@auth_router.post("/logout", response_model=LogoutResponseDTO)
+async def root_logout(
+    current_operator: Annotated[dict, Depends(get_current_operator)],
+):
+    return LogoutResponseDTO(
+        message=f"Logout successful for {current_operator['email']}. Remove the JWT token from the client.",
+    )
+
+
+@router.post("/login", response_model=LoginResponseDTO)
+async def login(request: OperatorLoginRequestDTO):
+    return authenticate_operator(request)
+
+
+@router.post("/logout", response_model=LogoutResponseDTO)
+async def logout(
+    current_operator: Annotated[dict, Depends(get_current_operator)],
+):
+    return LogoutResponseDTO(
+        message=f"Logout successful for {current_operator['email']}. Remove the JWT token from the client.",
+    )
 
 
 @router.get("/tickets")

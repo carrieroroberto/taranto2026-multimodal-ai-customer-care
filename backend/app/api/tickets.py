@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from backend.app.schemas.ticket import TicketRequestDTO
 from backend.app.repositories.persistence_repository import save_ticket, ensure_conversation
 from backend.app.services.ticket_service import generate_ticket_triage
+from backend.app.services.llm_service import normalize_language_code
 
 
 router = APIRouter(tags=["tickets"])
@@ -36,6 +37,7 @@ def post_ticket(ticket: TicketRequestDTO):
         "domain": triage["domain"],
         "priority": triage["priority"],
         "summary": triage["summary"],
+        "ai_summary": triage["ai_summary"],
         "original_message": triage["original_message"],
         "translated_message": triage["translated_message"],
     }
@@ -51,6 +53,20 @@ def post_ticket(ticket: TicketRequestDTO):
 
     return {
         "status": "ok",
-        "message": "Ticket created and sent to operator",
+        "message": ticket_success_message(ticket.language, ticket.user_email),
         "ticket": created_ticket,
     }
+
+
+def ticket_success_message(language: str | None, email: str) -> str:
+    match normalize_language_code(language):
+        case "en":
+            return f"Request sent successfully. The operator will reply to {email}."
+        case "es":
+            return f"Solicitud enviada correctamente. El operador respondera a {email}."
+        case "fr":
+            return f"Demande envoyee avec succes. L'operateur repondra a {email}."
+        case "ar":
+            return f"\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628 \u0628\u0646\u062c\u0627\u062d. \u0633\u064a\u0631\u062f \u0627\u0644\u0645\u0648\u0638\u0641 \u0639\u0644\u0649 {email}."
+        case _:
+            return f"Richiesta inviata con successo. L'operatore rispondera a {email}."

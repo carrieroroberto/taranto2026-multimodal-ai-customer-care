@@ -31,6 +31,7 @@ class TicketDraftDTO(BaseModel):
 class TicketRequestDTO(BaseModel):
     conversation_id: str
     user_email: str
+    language: str | None = None
     session_id: str | None = None
     category: TicketCategory | None = None
     domain: str | None = None

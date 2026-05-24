@@ -53,6 +53,7 @@ services:
   llm:
     image: ollama/ollama:latest
     container_name: tarai-llm
+    restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:
