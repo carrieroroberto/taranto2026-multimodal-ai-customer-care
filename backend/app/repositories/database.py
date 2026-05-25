@@ -1,8 +1,9 @@
 import logging
 import psycopg
 from psycopg.rows import dict_row
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Dict, Optional, Iterable
 from datetime import datetime
+import time  # Added import for time.sleep
 
 from backend.app.config import settings
 
@@ -267,7 +268,7 @@ def init_database(max_attempts: int = 30, delay_seconds: float = 1.0) -> None:
                 max_attempts,
                 exc,
             )
-            time.sleep(delay_seconds)
+            time.sleep(delay_seconds)  # Fixed: Added import for time
 
     raise RuntimeError("Database initialization failed.") from last_error
 
