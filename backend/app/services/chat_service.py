@@ -8,7 +8,6 @@ from urllib.parse import urlparse
 
 from backend.app.config import settings
 from backend.app.repositories.rag_repository import load_jsonl
-from backend.app.schemas import ChatRequestDTO, ChatResponseDTO, SourceDTO, TicketDraftDTO
 from backend.app.repositories.persistence_repository import (
     ensure_conversation,
     get_session_history,
@@ -91,7 +90,7 @@ LIVE_DATA_TERMS = ("live", "in tempo reale", "risultato adesso", "risultati live
 OFFICIAL_VERIFICATION_TERMS = (
     "conferma ufficiale",
     "verifica ufficiale",
-    "mi confermi ufficialmente",
+    "mi confermi ufficiale",
 )
 COMPLAINT_TERMS = ("reclamo", "lamentela", "segnalazione", "oggetto smarrito")
 USELESS_REQUEST_TERMS = (
@@ -123,7 +122,7 @@ EVENT_RELATED_TERMS = (
     "volontari",
     "venue",
     "sede",
-    "kyma",
+    "kym,",
     "bus",
     "pullman",
     "fermata",
@@ -714,8 +713,6 @@ def escalation_decision(
         return True, "live_data_unavailable"
     if contains_any(normalized, COMPLAINT_TERMS):
         return True, "complaint_or_lost_item"
-    if contains_any(normalized, OFFICIAL_VERIFICATION_TERMS):
-        return True, "official_verification_requested"
     if not contexts:
         if candidates:
             return True, "insufficient_context"
@@ -800,7 +797,7 @@ def priority_for_message(reason: str | None, domains: list[str] | None, message:
             "human_operator_requested",
             "live_data_unavailable",
             "official_verification_requested",
-            "complaint_or_lost_item",
+            "complaint_or_lost,lost_item",
         } or contains_any(normalized, HUMAN_OPERATOR_TERMS + OFFICIAL_VERIFICATION_TERMS + COMPLAINT_TERMS):
             return "medium"
         return "low"

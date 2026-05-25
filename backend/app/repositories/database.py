@@ -1,10 +1,8 @@
 import logging
-import time
-from collections.abc import Iterable
-from typing import Any
-
 import psycopg
 from psycopg.rows import dict_row
+from typing import Any, List, Dict, Optional
+from datetime import datetime
 
 from backend.app.config import settings
 
@@ -302,3 +300,84 @@ def fetch_all(query: str, params: Iterable[Any] | None = None) -> list[dict[str,
         with conn.cursor() as cursor:
             cursor.execute(query, params)
             return list(cursor.fetchall())
+
+
+def get_transport_details(stop_id: str) -> dict[str, Any]:
+    query = """
+        SELECT 
+            t.stop_id,
+            t.stop_name,
+            t.stop_lat,
+            t.stop_lon,
+            t.stop_desc,
+            ts.arrival_time,
+            ts.departure_time,
+            tr.route_short_name,
+            tr.route_long_name,
+            tr.route_type,
+            ta.agency_name,
+            ta.agency_url,
+            tc.service_id,
+            tc.start_date,
+            tc.end_date
+        FROM transport_stops t
+        JOIN transport_stop_times ts ON t.stop_id = ts.stop_id
+        JOIN transport_trips tt ON ts.trip_id = tt.trip_id
+        JOIN transport_routes tr ON tt.route_id = tr.route_id
+        JOIN transport_agency ta ON tr.agency_id = ta.agency_id
+        JOIN transport_calendar tc ON tt.service_id = tc.service_id
+        WHERE t.stop_id = %s
+        ORDER BY ts.stop_sequence
+        LIMIT 10
+    """
+    result = fetch_all(query, (stop_id,))
+    return result
+
+
+def get_transport_routes() -> list[dict[str, Any]]:
+    query = """
+        SELECT 
+            route_id,
+            route_short_name,
+            route_long_name,
+            route_type,
+            agency_id,
+            agency_name
+        FROM transport_routes
+        JOIN transport_agency ON transport_routes.agency_id = transport_agency.agency_id
+        ORDER BY route_type, route_short_name
+    """
+    return fetch_all(query)
+
+
+def get_transport_calendar(service_id: str) -> dict[str, Any]:
+    query = """
+        SELECT 
+            service_id,
+            monday,
+            tuesday,
+            wednesday,
+            thursday,
+            friday,
+            saturday,
+            sunday,
+            start_date,
+            end_date
+        FROM transport_calendar
+        WHERE service_id = %s
+    """
+    result = fetch_one(query, (service_id,))
+    return result
+
+
+def get_transport_calendar_dates(service_id: str) -> list[dict[str, Any]]:
+    query = """
+        SELECT 
+            service_id,
+            date,
+            exception_type
+        FROM transport_calendar_dates
+        WHERE service_id = %s
+        ORDER BY date
+    """
+    return fetch_all(query, (service_id,))
