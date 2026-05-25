@@ -27,7 +27,6 @@ from backend.app.services.llm_service import (
     normalize_text,
     unavailable_answer,
 )
-from backend.app.services.errors import DependencyServiceError
 from backend.app.services.rag_service import (
     QueryPlan,
     RetrievalCandidate,
@@ -37,7 +36,7 @@ from backend.app.services.rag_service import (
     select_answer_candidates,
     to_context,
 )
-
+from backend.app.schemas.chat import ChatRequestDTO, ChatResponseDTO, SourceDTO, TicketDraftDTO
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +132,7 @@ EVENT_RELATED_TERMS = (
 def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
     started_at = time.perf_counter()
     message = normalize_required_message(request.message)
-    session_id = request.session_id or str(uuid.uuid4())
+    session_id = request.session
     conversation_id = ensure_conversation(session_id=session_id)
 
     # Load history
@@ -711,7 +710,7 @@ def escalation_decision(
         return True, "human_operator_requested"
     if contains_any(normalized, LIVE_DATA_TERMS):
         return True, "live_data_unavailable"
-    if contains_any(normalized, COMPLAINT_TERMS):
+    if contains_any(normalized, COMPLAIT_TERMS):
         return True, "complaint_or_lost_item"
     if not contexts:
         if candidates:
@@ -798,7 +797,7 @@ def priority_for_message(reason: str | None, domains: list[str] | None, message:
             "live_data_unavailable",
             "official_verification_requested",
             "complaint_or_lost,lost_item",
-        } or contains_any(normalized, HUMAN_OPERATOR_TERMS + OFFICIAL_VERIFICATION_TERMS + COMPLAINT_TERMS):
+        } or contains_any(normalized, HUMAN_OPERATOR_TERMS + OFFICIAL_VERIFICATION_TERMS + COMPLAIT_TERMS):
             return "medium"
         return "low"
     return ticket_priority(reason, domains)

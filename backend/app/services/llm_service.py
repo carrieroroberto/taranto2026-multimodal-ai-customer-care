@@ -1,197 +1,27 @@
-import json
 import logging
 import re
-import unicodedata
-from dataclasses import dataclass
-from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+import time
+from typing import Any, Dict, List, Optional
+from functools import lru_cache
 
 from backend.app.config import settings
-from backend.app.services.rag_service import PlannedRetrievalQuery, QueryPlan, RetrievedContext
-from backend.app.services import transport_service
+from backend.app.repositories.persistence_repository import save_bot_message
+from backend.app.services.errors import DependencyServiceError
+from backend.app.services.rag_service import (
+    QueryPlan,
+    RetrievalCandidate,
+    RetrievedContext,
+    google_maps_url,
+    retrieve_context,
+    select_answer_candidates,
+    to_context,
+)
+from backend.app.services.chat_service import build_ticket_draft, ChatRequestDTO, ChatResponseDTO, SourceDTO, TicketDraftDTO
+from backend.app.repositories.rag_repository import load_jsonl
+from backend.app.repositories.database import get_transport_details, get_transport_routes, get_transport_calendar
+from backend.app.services.rag_service import parse_retrieval_queries, translate_static_answer
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class CalendarFact:
-    discipline: str | None
-    place: str
-    schedule: str
-
-
-VALID_DOMAINS = {
-    "calendar",
-    "venue",
-    "city_sports",
-    "ticketing",
-    "contacts",
-    "volunteering",
-    "accessibility",
-    "partnership",
-    "school_project",
-    "history",
-    "general",
-}
-
-VALID_INTENTS = {
-    "event_schedule",
-    "venue_information",
-    "ticketing",
-    "general_information",
-    "participation",
-}
-
-ENTITY_KEYS = ("discipline", "venue", "city", "date", "item", "transport_stop")
-
-ITALIAN_MARKERS = {
-    "ciao", "salve", "buongiorno", "buonasera", "voglio", "vorrei", "posso",
-    "puoi", "potresti", "devo", "serve", "aiuto", "dove", "quando", "quanto", "quale",
-    "quali", "chi", "che", "cosa", "come", "trovo", "trova", "sono", "sei", "perche", "per",
-    "con", "nel", "nella", "degli", "delle", "un", "una", "il", "lo", "la", "tabella", "lingua", "messaggio",
-    "risposta", "sempre", "dovrebbe", "selezionata", "risolvi", "problema",
-    "biglietti", "operatore", "parlare", "mandato", "inviato", "appena",
-    "rispondi", "italiano",
-}
-
-ENGLISH_MARKERS = {
-    "hello", "hi", "please", "want", "would", "could", "can", "where",
-    "when", "what", "which", "who", "how", "why", "is", "are", "ticket", "tickets", "operator",
-    "speak", "talk", "help", "english",
-}
-
-SPANISH_MARKERS = {
-    "hola", "quiero", "quisiera", "puedo", "puedes", "donde", "cuando",
-    "que", "quien", "quienes", "cual", "como", "por", "para", "es", "son", "entradas", "operador", "hablar",
-    "espanol",
-}
-
-FRENCH_MARKERS = {
-    "bonjour", "salut", "veux", "voudrais", "peux", "pouvez", "ou",
-    "quand", "quoi", "qui", "quel", "quelle", "comment", "pourquoi", "est", "sont", "billets", "operateur",
-    "parler", "francais",
-}
-
-LANGUAGE_NAMES = {
-    "it": "Italiano",
-    "en": "English",
-    "fr": "Français",
-    "es": "Español",
-    "ar": "العربية",
-}
-
-def detect_message_language(message: str, fallback: str = "it") -> str:
-    text = (message or "").strip()
-    normalized = normalize_text(text)
-    if not normalized:
-        return normalize_language_code(fallback)
-
-    if re.search(r"[\u0600-\u06ff]", text):
-        return "ar"
-
-    tokens = set(normalized.split())
-    scores = {
-        "it": language_score(tokens, normalized, ITALIAN_MARKERS),
-        "en": language_score(tokens, normalized, ENGLISH_MARKERS),
-        "es": language_score(tokens, normalized, SPANISH_MARKERS),
-        "fr": language_score(tokens, normalized, FRENCH_MARKERS),
-    }
-    best_language, best_score = max(scores.items(), key=lambda item: item[1])
-    if best_score <= 0:
-        return normalize_language_code(fallback)
-    return best_language
-
-
-def language_score(tokens: set[str], normalized: str, markers: set[str]) -> int:
-    score = sum(1 for token in tokens if token in markers)
-    score += sum(2 for marker in markers if " " in marker and marker in normalized)
-    return score
-
-
-QUERY_PLAN_SYSTEM_PROMPT = """
-Sei un analista esperto per i Giochi del Mediterraneo Taranto 2026.
-Il tuo compito è analizzare la domanda dell'utente e produrre un piano di ricerca in formato JSON.
-
-Domini validi:
-- calendar: date, orari e fasi delle gare (es. "quando ci sono le gare di nuoto?", "programma atletica")
-- venue: informazioni sugli impianti e luoghi (es. "dove si gioca a tennis?", "indirizzo stadio")
-- city_sports: quali sport si fanno in una città (es. "cosa fanno a Lecce?")
-- ticketing: biglietti, costi, dove comprarli
-- contacts: come contattare l'organizzazione o i volontari
-- volunteering: come diventare volontario
-- accessibility: info per disabili
-- history: storia dei giochi del mediterraneo
-- general: info generali sull'evento
-
-Intenti validi: event_schedule, venue_information, ticketing, general_information, participation.
-
-IMPORTANTE: Rileva la lingua del messaggio dell'utente. Se l'utente scrive in inglese, usa "en", se in spagnolo "es", etc. La "response_language" deve corrispondere alla lingua in cui l'utente sta parlando.
-
-Rispondi SOLO con il JSON, senza spiegazioni.
-JSON Schema:
-{
-  "intent": "...",
-  "domains": ["..."],
-  "retrieval_queries": [
-    {"query": "stringa ottimizzata per ricerca semantica", "domain": "dominio_specifico", "weight": 1.0}
-  ],
-  "entities": {"discipline": null, "venue": null, "city": null, "date": null},
-  "response_language": "it/en/fr/es/ar",
-  "needs_clarification": false,
-  "clarification_question": null
-}
-"""
-
-TRANSLATION_SYSTEM_PROMPT = """
-Sei un traduttore esperto. Traduci il testo fornito nella lingua richiesta mantenendo il tono istituzionale e cordiale.
-Non aggiungere commenti, rispondi solo con la traduzione.
-"""
-
-SUMMARY_SYSTEM_PROMPT = """
-Sei un assistente esperto nel riassumere conversazioni di assistenza clienti.
-Il tuo compito è creare un riassunto sintetico e professionale dell'intera conversazione fornita.
-Il riassunto deve essere in LINGUA ITALIANA.
-Focus: problema principale dell'utente, eventuali dati forniti e stato della richiesta.
-Rispondi solo con il riassunto, senza preamboli o commenti.
-"""
-
-def generate_conversation_summary(history: list[dict[str, Any]]) -> str:
-    if not history:
-        return "Nessuna conversazione disponibile."
-
-    formatted_history = "\n".join(
-        f"{'Utente' if h['role'] == 'user' else 'Bot'}: {h['content']}"
-        for h in history
-    )
-
-    payload = {
-        "model": settings.ollama_model,
-        "messages": [
-            {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Conversazione da riassumere:\n\n{formatted_history}"
-            },
-        ],
-        "stream": False,
-        "think": False,
-        "options": {
-            "temperature": 0.3,
-            "num_predict": 250,
-            "num_ctx": 4096,
-        },
-    }
-    
-    try:
-        response = call_ollama(payload)
-        summary = response.get("message", {}).get("content") or response.get("response")
-        if not summary:
-            return "Impossibile generare il riassunto."
-        return strip_thinking(summary).strip()
-    except Exception as exc:
-        logger.error("Error generating conversation summary: %s", exc)
-        return "Errore durante la generazione del riassunto."
 
 
 def build_query_plan(message: str, history: list[dict[str, Any]] | None = None) -> QueryPlan:
@@ -402,7 +232,7 @@ def unavailable_answer(response_language: str = "it") -> str:
         "it": "Al momento non ho un dato abbastanza preciso per risponderti con sicurezza. Posso indicarti il canale ufficiale o preparare una richiesta per un operatore.",
         "en": "I don't have enough precise information to answer you with certainty right now. I can direct you to the official channel or prepare a request for an operator.",
         "es": "No tengo información suficientemente precisa para responderte con seguridad en este momento. Puedo dirigirte al canal oficial o preparar una solicitud para un operador.",
-        "fr": "Je n'ai pas d'informations suffisamment précises per vous répondre avec certitude pour le moment. Je peux vous diriger vers le canal officiel ou préparer une demande pour un opérateur.",
+        "fr": "Je n'ai pas d'informations suffisamment précises pour vous répondre avec certitude pour le moment. Je peux vous diriger vers le canal officiel ou préparer une demande pour un opérateur.",
         "ar": "ليس لدي معلومات دقيقة كافية للإجابة عليك بيقين في الوقت الحالي. يمكنني توجيهك إلى القناة الرسمية أو إعداد طلب لموظف."
     }
     lang = normalize_language_code(response_language)
@@ -500,7 +330,7 @@ def normalize_text(text: str) -> str:
 
 
 def language_score(tokens: set[str], normalized: str, markers: set[str]) -> int:
-    score = sum(1 for token in tokens if token in markers)
+    score = sum(1 for token in tokens if token in normalized)
     score += sum(2 for marker in markers if " " in marker and marker in normalized)
     return score
 
@@ -519,23 +349,73 @@ def normalized_entities(entities: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in entities.items() if k in ENTITY_KEYS}
 
 
-def get_transport_details(query: str) -> dict[str, Any]:
-    # This function would typically query a database for structured transport data
-    # For demonstration purposes, we'll return a mock response
-    return {
-        "stop_id": "123",
-        "stop_name": "Stazione Centrale",
-        "stop_lat": 40.8517,
-        "stop_lon": 14.2692,
-        "stop_desc": "Main train station in Taranto",
-        "arrival_time": "08:00",
-        "departure_time": "08:15",
-        "route_short_name": "Line 1",
-        "route_long_name": "Taranto Metro Line 1",
-        "route_type": "metro",
-        "agency_name": "Taranto Public Transport",
-        "agency_url": "http://www.tarantopublictransport.it",
-        "service_id": "svc123",
-        "start_date": "2023-04-01",
-        "end_date": "2024-03-31"
-    }
+def get_transport_details(stop_id: str) -> dict[str, Any]:
+    query = """
+        SELECT 
+            t.stop_id,
+            t.stop_name,
+            t.stop_lat,
+            t.stop_lon,
+            t.stop_desc,
+            ts.arrival_time,
+            ts.departure_time,
+            tr.route_short_name,
+            tr.route_long_name,
+            tr.route_type,
+            ta.agency_name,
+            ta.agency_url,
+            tc.service_id,
+            tc.start_date,
+            tc.end
+    """
+    result = fetch_all(query, (stop_id,))
+    return result
+
+
+def get_transport_routes() -> list[dict[str, Any]]:
+    query = """
+        SELECT 
+            route_id,
+            route_short_name,
+            route_long_name,
+            route_type,
+            agency_id,
+            agency_name
+        FROM transport_routes
+        JOIN transport_agency ON transport_routes.agency_id = transport_agency.agency_id
+        ORDER BY route_type, route_short_name
+    """
+    return fetch_all(query)
+
+
+def get_transport_calendar(service_id: str) -> dict[str, Any]:
+    query = """
+        SELECT 
+            service_id,
+            monday,
+            tuesday,
+            wednesday,
+            thursday,
+            friday,
+            saturday,
+            sunday,
+            start_date,
+            end_date
+        FROM transport_calendar
+        WHERE service_id = %s
+    """
+    result = fetch_one(query, (service_id,))
+    return result
+
+
+def get_transport_calendar_dates(service_id: str) -> list[dict[str, Any]]:
+    query = """
+        SELECT 
+            service_id,
+            date,
+            exception_type
+        FROM transport_calendar_dates
+        WHERE service_id = %s
+        ORDER BY date
+    """
+    return fetch_all(query, (service_id,))
