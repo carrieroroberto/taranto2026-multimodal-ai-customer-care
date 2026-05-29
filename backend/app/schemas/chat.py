@@ -25,6 +25,7 @@ class SourceDTO(BaseModel):
 class ChatResponseDTO(BaseModel):
     session_id: str | None = None
     conversation_id: str | None = None
+
     user_message_id: str | None = None
     bot_message_id: str | None = None
     message_id: str | None = None  # Alias for bot_message_id as per latest request

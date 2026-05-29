@@ -118,7 +118,7 @@ function ChatMessage({
               {message.audio ? (
                 <AudioWaveform audio={message.audio} label={t.audioMessage} />
               ) : null}
-              {message.text && sources.length ? (
+              {message.text && message.messageType !== "audio" && sources.length ? (
                 <TextWithInlineSources
                   className={
                     message.image ? "message-text message-text-under-media" : ""
@@ -126,7 +126,7 @@ function ChatMessage({
                   sources={sources}
                   text={message.text}
                 />
-              ) : message.text ? (
+              ) : message.text && message.messageType !== "audio" ? (
                 <span
                   className={
                     message.image ? "message-text message-text-under-media" : ""

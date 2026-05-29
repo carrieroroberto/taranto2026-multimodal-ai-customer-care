@@ -13,7 +13,6 @@ from backend.app.config import settings
 from backend.app.repositories.database import init_database
 from backend.app.repositories.rag_repository import load_jsonl
 from backend.app.repositories.persistence_repository import ensure_default_operator, sync_kb_sources
-from backend.app.repositories.transport_repository import import_transport_data
 from backend.app.services.auth_service import get_password_hash
 from backend.app.services.errors import AppServiceError
 from backend.app.services.rag_service import start_knowledge_base_startup_task
@@ -39,11 +38,6 @@ async def lifespan(_app: FastAPI):
         logger.info("Seeding default operator: %s", settings.default_operator_email)
         hashed_password = get_password_hash(settings.default_operator_password)
         ensure_default_operator(settings.default_operator_email, hashed_password)
-        
-    try:
-        import_transport_data()
-    except Exception as exc:
-        logger.error("Failed to import transport data: %s", exc)
 
     start_knowledge_base_startup_task()
     yield

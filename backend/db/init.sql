@@ -44,7 +44,6 @@ CREATE TABLE IF NOT EXISTS kb_sources (
     domain_label TEXT NOT NULL,
     title TEXT,
     source_url TEXT,
-    is_kyma_mobility BOOLEAN NOT NULL DEFAULT FALSE,
     search_text TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -52,9 +51,5 @@ CREATE TABLE IF NOT EXISTS kb_sources (
 CREATE TABLE IF NOT EXISTS kb_source_domains (
     label TEXT PRIMARY KEY,
     source_count INTEGER NOT NULL DEFAULT 0,
-    kyma_mobility_count INTEGER NOT NULL DEFAULT 0,
     updated_at TIMESTAMP DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_kb_sources_domain_label ON kb_sources (domain_label);
-CREATE INDEX IF NOT EXISTS idx_kb_sources_kyma_mobility ON kb_sources (is_kyma_mobility);

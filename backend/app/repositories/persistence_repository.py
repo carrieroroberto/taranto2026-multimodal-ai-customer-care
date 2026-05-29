@@ -402,24 +402,6 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
     return stringify_ids(dict(row))
 
 
-MOBILITY_TERMS = (
-    "kyma",
-    "mobilita",
-    "mobility",
-    "trasport",
-    "transport",
-    "autobus",
-    "bus",
-    "navetta",
-    "shuttle",
-    "treno",
-    "train",
-    "parcheggio",
-    "parking",
-    "fermata",
-)
-
-
 def sync_kb_sources(records: list[dict[str, Any]]) -> int:
     if not records:
         return 0
@@ -451,17 +433,15 @@ def sync_kb_sources(records: list[dict[str, Any]]) -> int:
                         domain_label,
                         title,
                         source_url,
-                        is_kyma_mobility,
                         search_text,
                         updated_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, clock_timestamp())
+                    VALUES (%s, %s, %s, %s, %s, %s, clock_timestamp())
                     ON CONFLICT (id) DO UPDATE SET
                         kb_type = EXCLUDED.kb_type,
                         domain_label = EXCLUDED.domain_label,
                         title = EXCLUDED.title,
                         source_url = EXCLUDED.source_url,
-                        is_kyma_mobility = EXCLUDED.is_kyma_mobility,
                         search_text = EXCLUDED.search_text,
                         updated_at = clock_timestamp()
                     """,
@@ -471,7 +451,6 @@ def sync_kb_sources(records: list[dict[str, Any]]) -> int:
                         kb_type,
                         title,
                         source_url,
-                        source_mentions_mobility(search_text),
                         search_text,
                     ),
                 )
@@ -482,13 +461,11 @@ def sync_kb_sources(records: list[dict[str, Any]]) -> int:
                 INSERT INTO kb_source_domains (
                     label,
                     source_count,
-                    kyma_mobility_count,
                     updated_at
                 )
                 SELECT
                     domain_label,
                     COUNT(*)::int,
-                    COUNT(*) FILTER (WHERE is_kyma_mobility)::int,
                     clock_timestamp()
                 FROM kb_sources
                 GROUP BY domain_label
@@ -498,19 +475,10 @@ def sync_kb_sources(records: list[dict[str, Any]]) -> int:
     return len(records)
 
 
-def source_mentions_mobility(text: str) -> bool:
-    normalized = re.sub(r"[^a-z0-9]+", " ", text.lower())
-    tokens = set(normalized.split())
-    return any(
-        term in tokens if len(term) <= 4 else term in normalized
-        for term in MOBILITY_TERMS
-    )
-
-
 def get_kb_source_domains() -> list[dict[str, Any]]:
     rows = fetch_all(
         """
-        SELECT label, source_count, kyma_mobility_count
+        SELECT label, source_count
         FROM kb_source_domains
         ORDER BY label ASC
         """
@@ -521,9 +489,9 @@ def get_kb_source_domains() -> list[dict[str, Any]]:
 def get_kb_sources_for_triage(limit: int = 4000) -> list[dict[str, Any]]:
     rows = fetch_all(
         """
-        SELECT id, domain_label, title, source_url, is_kyma_mobility, search_text
+        SELECT id, domain_label, title, source_url, search_text
         FROM kb_sources
-        ORDER BY is_kyma_mobility DESC, domain_label ASC, id ASC
+        ORDER BY domain_label ASC, id ASC
         LIMIT %s
         """,
         (max(limit, 1),),

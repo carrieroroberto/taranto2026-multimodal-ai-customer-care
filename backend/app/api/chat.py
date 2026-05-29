@@ -12,8 +12,8 @@ router = APIRouter(tags=["chat"])
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "../../data/uploads")
 
 @router.post("/chat", response_model=ChatResponseDTO)
-def chat_endpoint(request: ChatRequestDTO) -> ChatResponseDTO:
-    return answer_chat(request)
+async def chat_endpoint(request: ChatRequestDTO) -> ChatResponseDTO:
+    return await answer_chat(request)
 
 
 @router.post("/chat/audio", response_model=ChatResponseDTO)
@@ -27,20 +27,39 @@ async def chat_audio_endpoint(
     if not content_type.startswith("audio/"):
         raise HTTPException(status_code=400, detail="Unsupported file type. Please upload an audio file.")
 
+    # Save audio file for persistence
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    file_id = str(uuid.uuid4())
+    # Try to keep original extension if possible
+    ext = ".webm"
+    if "wav" in content_type: ext = ".wav"
+    elif "mpeg" in content_type: ext = ".mp3"
+    elif "ogg" in content_type: ext = ".ogg"
+    
+    filename = f"{file_id}{ext}"
+    filepath = os.path.join(UPLOADS_DIR, filename)
+    
+    content = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+    await file.seek(0) # Seek back for transcription
+    
+    audio_url = f"/api/uploads/{filename}"
     extracted_text = await transcribe_audio(file)
-    # If transcription fails (empty), we don't throw 400 anymore.
-    # Instead, we send a 'could not hear' message to the LLM so it can trigger its 
-    # own fallback/clarification logic which hides sources.
+    
+    # If transcription fails (empty), we send a special tag
     if not extracted_text:
         extracted_text = "[AUDIO_INCOMPRENSIBILE]"
 
-    response = answer_chat(
+    stored_user_content = f"[AUDIO_URL:{audio_url}]\n{extracted_text}"
+
+    response = await answer_chat(
         ChatRequestDTO(
             message=extracted_text,
             session_id=session_id,
             language=language,
             message_type="audio",
-            stored_user_content=extracted_text,
+            stored_user_content=stored_user_content,
         )
     )
     response.extracted_text = extracted_text if extracted_text != "[AUDIO_INCOMPRENSIBILE]" else None
@@ -66,7 +85,7 @@ async def chat_multimodal_endpoint(
         extracted_text = await transcribe_audio(file)
         if not extracted_text:
             extracted_text = "[AUDIO_INCOMPRENSIBILE]"
-        response = answer_chat(
+        response = await answer_chat(
             ChatRequestDTO(
                 message=extracted_text,
                 session_id=session_id,
@@ -139,7 +158,7 @@ async def chat_multimodal_endpoint(
             message_type="image",
             stored_user_content=stored_user_content,
         )
-        response = answer_chat(request)
+        response = await answer_chat(request)
         
         # Set the extracted text so the frontend can display what it heard/read
         response.extracted_text = extracted_text or visual_description or None

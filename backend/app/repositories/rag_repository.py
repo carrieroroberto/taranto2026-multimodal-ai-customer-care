@@ -1,14 +1,12 @@
 import json
 from pathlib import Path
 from typing import Any
-from datetime import datetime
 
 import chromadb
 from chromadb.api.models.Collection import Collection
 from chromadb.config import Settings as ChromaSettings
 
 from backend.app.config import settings
-from backend.app.repositories.database import get_transport_details, get_transport_routes, get_transport_calendar
 
 
 REQUIRED_FIELDS = {"id", "document", "metadata"}
@@ -114,12 +112,3 @@ def recreate_collection() -> Collection:
         name=settings.collection_name,
         metadata=collection_metadata(),
     )
-
-
-def get_combined_mobility_data(stop_id: str) -> dict[str, Any]:
-    structured_data = get_transport_details(stop_id)
-    unstructured_data = load_jsonl()
-    return {
-        "structured": structured_data,
-        "unstructured": unstructured_data
-    }
