@@ -41,17 +41,11 @@ def generate_ticket_triage(conversation_id: str) -> dict[str, Any]:
     # 1. TRANSLATION LOGIC
     translated_message = None
     try:
-        logger.info("DEBUG: Starting triage translation for content: %r", content[:100])
         translated = translate_text(content, "it")
-        logger.info("DEBUG: LLM returned translation: %r", (translated or "NONE")[:100])
-        
         if translated and translated.strip().lower() != content.strip().lower():
             translated_message = translated
-            logger.info("DEBUG: SETTING translated_message = %r", translated_message[:50])
-        else:
-            logger.info("DEBUG: SKIPPING translation (identical or empty)")
     except Exception as e:
-        logger.error("DEBUG: Ticket translation CRITICAL ERROR: %s", e)
+        logger.error("Ticket translation error: %s", e)
 
     domain = detect_ticket_domain(content, "")
     priority = priority_for_ticket(content, domain)
@@ -103,7 +97,6 @@ DOMAIN_PRIORITY = {
     "tender_notice": "medium",
     "ticketing": "medium",
     "venue": "medium",
-    "venue_geocoding": "medium",
     "volunteers": "medium",
 }
 USELESS_REQUEST_TERMS = (
@@ -135,18 +128,12 @@ EVENT_RELATED_TERMS = (
     "volontari",
     "venue",
     "sede",
-    "kyma",
-    "bus",
-    "pullman",
-    "fermata",
-    "parcheggio",
     "iacovone",
 )
 
 DOMAIN_ALIASES = {
     "ticketing": ("bigliett", "ticket", "costo", "prezzo", "pagamento", "acquisto"),
     "venue": ("sede", "impianto", "stadio", "palazzetto", "dove", "indirizzo"),
-    "venue_geocoding": ("mappa", "maps", "coordinate", "parcheggio", "fermata"),
     "event_schedule": ("calendario", "orario", "quando", "data", "programma", "gara"),
     "accessibility": ("accessibil", "disabil", "carrozzina", "barriere"),
     "volunteers": ("volontar", "volunteer"),
@@ -155,24 +142,6 @@ DOMAIN_ALIASES = {
     "contacts": ("contatto", "email", "telefono", "segreteria"),
     "tender_notice": ("bando", "avviso", "gara d'appalto", "appalto"),
 }
-
-MOBILITY_DOMAIN = "venue_geocoding"
-MOBILITY_ALIASES = (
-    "kyma",
-    "mobilita",
-    "mobility",
-    "trasport",
-    "transport",
-    "autobus",
-    "bus",
-    "navetta",
-    "shuttle",
-    "treno",
-    "train",
-    "parcheggio",
-    "parking",
-    "fermata",
-)
 
 
 def detect_ticket_domain(content: str, summary: str) -> str:
@@ -195,8 +164,6 @@ def detect_ticket_domain(content: str, summary: str) -> str:
             )
         )
         score = score_domain_match(text, tokens, source_text)
-        if source.get("is_kyma_mobility") and contains_any(text, MOBILITY_ALIASES):
-            score += 5
         if score > best_score:
             best_score = score
             best_domain = str(source.get("domain_label") or best_domain)
@@ -207,33 +174,7 @@ def detect_ticket_domain(content: str, summary: str) -> str:
             best_score = alias_score
             best_domain = domain
 
-    if contains_any(text, MOBILITY_ALIASES):
-        mobility_domain = preferred_mobility_domain()
-        best_domain = mobility_domain or MOBILITY_DOMAIN
-
     return best_domain
-
-
-def preferred_mobility_domain() -> str | None:
-    try:
-        domains = get_kb_source_domains()
-    except Exception:
-        return None
-
-    mobility_domains = [
-        domain
-        for domain in domains
-        if int(domain.get("kyma_mobility_count") or 0) > 0
-    ]
-    if not mobility_domains:
-        return None
-    return max(
-        mobility_domains,
-        key=lambda domain: (
-            int(domain.get("kyma_mobility_count") or 0),
-            str(domain.get("label") or ""),
-        ),
-    ).get("label")
 
 
 def score_domain_match(query_text: str, query_tokens: set[str], source_text: str) -> int:
@@ -258,8 +199,6 @@ def priority_for_ticket(content: str, domain: str) -> str:
         return "medium"
     if not is_event_related(text):
         return "low"
-    if contains_any(text, MOBILITY_ALIASES):
-        return "medium"
     return DOMAIN_PRIORITY.get(domain, "medium")
 
 

@@ -50,7 +50,7 @@ docker compose stop llm llm-init >nul 2>&1
 docker compose up -d --build --force-recreate --no-deps database pgadmin vector-db > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
-call :WAIT_HEALTH database 120
+call :WAIT_HEALTH tarai-database 120
 if errorlevel 1 goto START_ERROR
 
 docker compose up -d --build --force-recreate --no-deps backend frontend cloudflared > "%START_LOG%" 2>&1
@@ -65,7 +65,7 @@ echo.
 docker compose up -d --build --force-recreate --no-deps database pgadmin vector-db llm > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
-call :WAIT_HEALTH database 120
+call :WAIT_HEALTH tarai-database 120
 if errorlevel 1 goto START_ERROR
 
 echo Verifico/scarico modello LLM configurato...

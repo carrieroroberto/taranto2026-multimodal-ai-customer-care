@@ -1,9 +1,9 @@
 import logging
 import psycopg
 from psycopg.rows import dict_row
-from typing import Any, List, Dict, Optional, Iterable
+from typing import Any, Iterable
 from datetime import datetime
-import time  # Added import for time.sleep
+import time
 
 from backend.app.config import settings
 
@@ -105,7 +105,6 @@ SCHEMA_STATEMENTS = (
         domain_label TEXT NOT NULL,
         title TEXT,
         source_url TEXT,
-        is_kyma_mobility BOOLEAN NOT NULL DEFAULT FALSE,
         search_text TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT NOW()
     );
@@ -114,111 +113,12 @@ SCHEMA_STATEMENTS = (
     CREATE TABLE IF NOT EXISTS kb_source_domains (
         label TEXT PRIMARY KEY,
         source_count INTEGER NOT NULL DEFAULT 0,
-        kyma_mobility_count INTEGER NOT NULL DEFAULT 0,
         updated_at TIMESTAMP DEFAULT NOW()
     );
     """,
     """
-    CREATE TABLE IF NOT EXISTS transport_agency (
-        agency_id TEXT PRIMARY KEY,
-        agency_name TEXT NOT NULL,
-        agency_url TEXT NOT NULL,
-        agency_timezone TEXT NOT NULL,
-        agency_lang TEXT,
-        agency_phone TEXT
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS transport_stops (
-        stop_id TEXT PRIMARY KEY,
-        stop_code TEXT,
-        stop_name TEXT NOT NULL,
-        stop_desc TEXT,
-        stop_lat DOUBLE PRECISION,
-        stop_lon DOUBLE PRECISION,
-        zone_id TEXT,
-        stop_url TEXT,
-        location_type INTEGER,
-        parent_station TEXT
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS transport_routes (
-        route_id TEXT PRIMARY KEY,
-        agency_id TEXT REFERENCES transport_agency(agency_id),
-        route_short_name TEXT,
-        route_long_name TEXT,
-        route_desc TEXT,
-        route_type INTEGER NOT NULL,
-        route_url TEXT,
-        route_color TEXT,
-        route_text_color TEXT
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS transport_calendar (
-        service_id TEXT PRIMARY KEY,
-        monday INTEGER NOT NULL,
-        tuesday INTEGER NOT NULL,
-        wednesday INTEGER NOT NULL,
-        thursday INTEGER NOT NULL,
-        friday INTEGER NOT NULL,
-        saturday INTEGER NOT NULL,
-        sunday INTEGER NOT NULL,
-        start_date TEXT NOT NULL,
-        end_date TEXT NOT NULL
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS transport_calendar_dates (
-        service_id TEXT NOT NULL,
-        date TEXT NOT NULL,
-        exception_type INTEGER NOT NULL,
-        PRIMARY KEY (service_id, date)
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS transport_trips (
-        route_id TEXT REFERENCES transport_routes(route_id),
-        service_id TEXT,
-        trip_id TEXT PRIMARY KEY,
-        trip_headsign TEXT,
-        trip_short_name TEXT,
-        direction_id INTEGER,
-        block_id TEXT,
-        shape_id TEXT
-    );
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS transport_stop_times (
-        trip_id TEXT REFERENCES transport_trips(trip_id),
-        arrival_time TEXT NOT NULL,
-        departure_time TEXT NOT NULL,
-        stop_id TEXT REFERENCES transport_stops(stop_id),
-        stop_sequence INTEGER NOT NULL,
-        stop_headsign TEXT,
-        pickup_type INTEGER,
-        drop_off_type INTEGER,
-        shape_dist_traveled DOUBLE PRECISION,
-        PRIMARY KEY (trip_id, stop_sequence)
-    );
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS idx_transport_stop_times_stop_id ON transport_stop_times (stop_id);
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS idx_transport_trips_route_id ON transport_trips (route_id);
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS idx_transport_stops_name ON transport_stops (stop_name);
-    """,
-    """
     CREATE INDEX IF NOT EXISTS idx_kb_sources_domain_label
     ON kb_sources (domain_label);
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS idx_kb_sources_kyma_mobility
-    ON kb_sources (is_kyma_mobility);
     """,
     "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_summary TEXT;",
     "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();",
@@ -268,7 +168,7 @@ def init_database(max_attempts: int = 30, delay_seconds: float = 1.0) -> None:
                 max_attempts,
                 exc,
             )
-            time.sleep(delay_seconds)  # Fixed: Added import for time
+            time.sleep(delay_seconds)
 
     raise RuntimeError("Database initialization failed.") from last_error
 
@@ -301,84 +201,3 @@ def fetch_all(query: str, params: Iterable[Any] | None = None) -> list[dict[str,
         with conn.cursor() as cursor:
             cursor.execute(query, params)
             return list(cursor.fetchall())
-
-
-def get_transport_details(stop_id: str) -> dict[str, Any]:
-    query = """
-        SELECT 
-            t.stop_id,
-            t.stop_name,
-            t.stop_lat,
-            t.stop_lon,
-            t.stop_desc,
-            ts.arrival_time,
-            ts.departure_time,
-            tr.route_short_name,
-            tr.route_long_name,
-            tr.route_type,
-            ta.agency_name,
-            ta.agency_url,
-            tc.service_id,
-            tc.start_date,
-            tc.end_date
-        FROM transport_stops t
-        JOIN transport_stop_times ts ON t.stop_id = ts.stop_id
-        JOIN transport_trips tt ON ts.trip_id = tt.trip_id
-        JOIN transport_routes tr ON tt.route_id = tr.route_id
-        JOIN transport_agency ta ON tr.agency_id = ta.agency_id
-        JOIN transport_calendar tc ON tt.service_id = tc.service_id
-        WHERE t.stop_id = %s
-        ORDER BY ts.stop_sequence
-        LIMIT 10
-    """
-    result = fetch_all(query, (stop_id,))
-    return result
-
-
-def get_transport_routes() -> list[dict[str, Any]]:
-    query = """
-        SELECT 
-            route_id,
-            route_short_name,
-            route_long_name,
-            route_type,
-            agency_id,
-            agency_name
-        FROM transport_routes
-        JOIN transport_agency ON transport_routes.agency_id = transport_agency.agency_id
-        ORDER BY route_type, route_short_name
-    """
-    return fetch_all(query)
-
-
-def get_transport_calendar(service_id: str) -> dict[str, Any]:
-    query = """
-        SELECT 
-            service_id,
-            monday,
-            tuesday,
-            wednesday,
-            thursday,
-            friday,
-            saturday,
-            sunday,
-            start_date,
-            end_date
-        FROM transport_calendar
-        WHERE service_id = %s
-    """
-    result = fetch_one(query, (service_id,))
-    return result
-
-
-def get_transport_calendar_dates(service_id: str) -> list[dict[str, Any]]:
-    query = """
-        SELECT 
-            service_id,
-            date,
-            exception_type
-        FROM transport_calendar_dates
-        WHERE service_id = %s
-        ORDER BY date
-    """
-    return fetch_all(query, (service_id,))

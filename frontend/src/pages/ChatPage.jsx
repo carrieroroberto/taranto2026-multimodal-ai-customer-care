@@ -506,6 +506,7 @@ function createMessage(role, text, isLoading = false) {
 function mapPersistedMessage(m) {
   let text = m.content || "";
   let image = undefined;
+  let audio = undefined;
   
   // Se è un'immagine ricaricata dal DB, estraiamo l'URL se presente e puliamo il testo
   if (m.type === "image") {
@@ -525,6 +526,15 @@ function mapPersistedMessage(m) {
     if (!image && !text) {
       text = "📸 [Immagine inviata]";
     }
+  } else if (m.type === "audio") {
+    const urlMatch = text.match(/\[AUDIO_URL:(.*?)\]/);
+    if (urlMatch) {
+      audio = { url: urlMatch[1] };
+      text = text.replace(urlMatch[0], "").trim();
+    }
+    if (text === "[AUDIO_INCOMPRENSIBILE]") {
+      text = "🎤 [Audio non trascritto]";
+    }
   }
 
   return {
@@ -534,6 +544,7 @@ function mapPersistedMessage(m) {
     role: m.role === "bot" ? "assistant" : "user",
     text,
     image,
+    audio,
     messageType: m.type || "text",
     satisfaction: m.satisfaction ?? null,
     feedbackDisabled: isEscalationText(text),

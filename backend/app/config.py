@@ -75,5 +75,10 @@ class Settings:
     )
     query_parser_num_predict: int = int(os.getenv("QUERY_PARSER_NUM_PREDICT", "420"))
 
+    # Groq Fallback
+    groq_api_key: str | None = os.getenv("GROQ_API_KEY")
+    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    llm_fallback_timeout_seconds: int = int(os.getenv("LLM_FALLBACK_TIMEOUT_SECONDS", "40"))
+
 
 settings = Settings()
