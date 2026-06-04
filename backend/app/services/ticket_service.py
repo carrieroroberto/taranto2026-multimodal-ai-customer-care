@@ -1,62 +1,46 @@
 import logging
+import json
 import re
 import unicodedata
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from backend.app.repositories.persistence_repository import (
     get_conversation_messages,
-    get_kb_source_domains,
-    get_kb_sources_for_triage,
 )
-from backend.app.services.llm_service import translate_text, generate_conversation_summary
+from backend.app.config import settings
+from backend.app.services.llm_service import generate_conversation_summary
 
 
 logger = logging.getLogger(__name__)
 
 
-def generate_ticket_triage(conversation_id: str) -> dict[str, Any]:
+async def generate_ticket_triage(conversation_id: str) -> dict[str, Any]:
     messages = get_conversation_messages(conversation_id)
     if not messages:
         return {
-            "domain": "general",
-            "priority": "medium",
+            "domain": "informazioni generali",
+            "priority": "media",
             "summary": "Ticket creato senza messaggi.",
-            "ai_summary": "Nessuna conversazione disponibile.",
-            "original_message": "Nessun messaggio trovato.",
-            "translated_message": None,
         }
 
-    # Find the last user message for other triage fields
-    user_messages = [m for m in messages if m["role"] == "user"]
-    last_user_message = user_messages[-1] if user_messages else messages[-1]
-    
-    content = last_user_message["content"]
+    escalation_message = find_escalation_message(messages)
+    content = escalation_message["content"]
     fallback_summary = build_fallback_conversation_summary(messages)
 
-    # Generate a concise Italian AI summary of the whole conversation for the operator dashboard.
-    ai_summary = generate_conversation_summary(messages)
-    if not is_usable_ai_summary(ai_summary):
-        ai_summary = fallback_summary
+    # Generate a concise Italian summary focused on the message that opened escalation.
+    generated_summary = await generate_conversation_summary(messages, escalation_message)
+    if not is_usable_summary(generated_summary):
+        generated_summary = fallback_summary
     
-    # 1. TRANSLATION LOGIC
-    translated_message = None
-    try:
-        translated = translate_text(content, "it")
-        if translated and translated.strip().lower() != content.strip().lower():
-            translated_message = translated
-    except Exception as e:
-        logger.error("Ticket translation error: %s", e)
-
-    domain = detect_ticket_domain(content, "")
-    priority = priority_for_ticket(content, domain)
+    raw_domain = detect_ticket_domain(content, generated_summary)
+    priority = priority_for_ticket(content, raw_domain)
     
     return {
-        "domain": domain,
+        "domain": localize_ticket_domain(raw_domain),
         "priority": priority,
-        "summary": summarize_text(ai_summary, 160),
-        "ai_summary": ai_summary,
-        "original_message": content,
-        "translated_message": translated_message,
+        "summary": generated_summary,
     }
 
 
@@ -89,15 +73,15 @@ MEDIUM_PRIORITY_TERMS = (
 )
 
 DOMAIN_PRIORITY = {
-    "accessibility": "high",
-    "contacts": "medium",
-    "faq": "medium",
-    "partnership": "medium",
-    "school_project": "medium",
-    "tender_notice": "medium",
-    "ticketing": "medium",
-    "venue": "medium",
-    "volunteers": "medium",
+    "accessibility": "alta",
+    "contacts": "media",
+    "faq": "media",
+    "partnership": "media",
+    "school_project": "media",
+    "tender_notice": "media",
+    "ticketing": "media",
+    "venue": "media",
+    "volunteers": "media",
 }
 USELESS_REQUEST_TERMS = (
     "test",
@@ -150,23 +134,11 @@ def detect_ticket_domain(content: str, summary: str) -> str:
     best_domain = "general_information"
     best_score = 0
 
-    try:
-        sources = get_kb_sources_for_triage()
-    except Exception as exc:
-        logger.warning("kb domain triage unavailable: %s", exc)
-        sources = []
-
-    for source in sources:
-        source_text = normalize_for_triage(
-            " ".join(
-                str(source.get(field) or "")
-                for field in ("id", "domain_label", "title", "source_url", "search_text")
-            )
-        )
-        score = score_domain_match(text, tokens, source_text)
+    for record in load_triage_knowledge_records():
+        score = score_knowledge_match(text, tokens, record["search_text"])
         if score > best_score:
             best_score = score
-            best_domain = str(source.get("domain_label") or best_domain)
+            best_domain = record["domain"]
 
     for domain, aliases in DOMAIN_ALIASES.items():
         alias_score = sum(4 for alias in aliases if alias in text)
@@ -177,7 +149,78 @@ def detect_ticket_domain(content: str, summary: str) -> str:
     return best_domain
 
 
-def score_domain_match(query_text: str, query_tokens: set[str], source_text: str) -> int:
+def localize_ticket_domain(domain: str | None) -> str:
+    normalized = str(domain or "").strip().lower()
+    return {
+        "general": "informazioni generali",
+        "general_information": "informazioni generali",
+        "games general": "informazioni generali",
+        "games_general": "informazioni generali",
+        "unknown": "informazioni generali",
+        "ticketing": "biglietteria",
+        "venue": "impianti",
+        "venue_information": "impianti",
+        "event_schedule": "calendario",
+        "calendar": "calendario",
+        "schedule": "calendario",
+        "transport": "trasporti",
+        "accessibility": "accessibilita",
+        "volunteering": "volontariato",
+        "volunteers": "volontariato",
+        "contacts": "contatti",
+        "complaint": "reclamo",
+        "partnership": "partnership",
+        "school_project": "progetto scuola",
+        "tender_notice": "bandi e avvisi",
+        "organizing committee": "comitato organizzatore",
+        "organizing_committee": "comitato organizzatore",
+        "historical results page": "risultati storici",
+        "historical_results_page": "risultati storici",
+        "sport": "sport",
+        "faq": "faq",
+    }.get(normalized, "informazioni generali")
+
+
+@lru_cache(maxsize=1)
+def load_triage_knowledge_records() -> tuple[dict[str, str], ...]:
+    path = Path(settings.kb_path)
+    if not path.exists():
+        logger.warning("ticket triage knowledge file not found: %s", path)
+        return ()
+
+    records: list[dict[str, str]] = []
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            for line in file:
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                metadata = record.get("metadata") or {}
+                domain = str(metadata.get("type") or "general_information").strip()
+                if not domain:
+                    domain = "general_information"
+                search_text = normalize_for_triage(
+                    " ".join(
+                        str(part or "")
+                        for part in (
+                            record.get("id"),
+                            domain,
+                            metadata.get("title"),
+                            metadata.get("source_url"),
+                            record.get("document"),
+                        )
+                    )
+                )
+                if search_text:
+                    records.append({"domain": domain, "search_text": search_text})
+    except Exception as exc:
+        logger.warning("ticket triage knowledge load failed: %s", exc)
+        return ()
+
+    return tuple(records)
+
+
+def score_knowledge_match(query_text: str, query_tokens: set[str], source_text: str) -> int:
     score = 0
     for token in query_tokens:
         if len(token) < 4:
@@ -192,14 +235,14 @@ def score_domain_match(query_text: str, query_tokens: set[str], source_text: str
 def priority_for_ticket(content: str, domain: str) -> str:
     text = normalize_for_triage(content)
     if looks_useless_request(text):
-        return "low"
+        return "bassa"
     if contains_any(text, HIGH_PRIORITY_TERMS):
-        return "high"
+        return "alta"
     if contains_any(text, MEDIUM_PRIORITY_TERMS):
-        return "medium"
+        return "media"
     if not is_event_related(text):
-        return "low"
-    return DOMAIN_PRIORITY.get(domain, "medium")
+        return "bassa"
+    return DOMAIN_PRIORITY.get(domain, "media")
 
 
 def looks_useless_request(normalized_text: str) -> bool:
@@ -229,7 +272,7 @@ def summarize_text(text: str, max_len: int = 100) -> str:
     return compacted[:max_len-3].rstrip() + "..."
 
 
-def is_usable_ai_summary(summary: str | None) -> bool:
+def is_usable_summary(summary: str | None) -> bool:
     if not summary or not summary.strip():
         return False
     normalized = summary.strip().lower()
@@ -240,20 +283,47 @@ def is_usable_ai_summary(summary: str | None) -> bool:
 
 
 def build_fallback_conversation_summary(messages: list[dict[str, Any]]) -> str:
-    user_messages = [
-        summarize_text(str(message.get("content") or ""), 180)
-        for message in messages
-        if message.get("role") == "user" and str(message.get("content") or "").strip()
-    ]
+    escalation_message = find_escalation_message(messages)
+    user_messages = [clean_message_content(str(message.get("content") or "")) for message in messages if message.get("role") == "user"]
+    user_messages = [summarize_text(message, 180) for message in user_messages if message.strip()]
     if not user_messages:
         return "L'utente ha richiesto assistenza, ma non sono presenti messaggi utente leggibili nella conversazione."
 
-    first_message = user_messages[0]
-    last_message = user_messages[-1]
-    if len(user_messages) == 1 or first_message == last_message:
-        return f"L'utente ha richiesto assistenza su: {last_message}"
+    escalation_text = summarize_text(clean_message_content(str(escalation_message.get("content") or "")), 220)
+    if len(user_messages) == 1:
+        return f"L'utente ha richiesto assistenza su: {escalation_text}"
 
     return (
-        f"L'utente ha richiesto assistenza. Primo messaggio: {first_message}. "
-        f"Ultimo messaggio: {last_message}."
+        f"L'utente ha richiesto assistenza su: {escalation_text}. "
+        f"Contesto precedente: {summarize_text(user_messages[0], 120)}"
     )
+
+
+def find_escalation_message(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    if not messages:
+        return {"role": "user", "content": ""}
+
+    negative_bot_indexes = [
+        index
+        for index, message in enumerate(messages)
+        if message.get("role") == "bot" and message.get("satisfaction") is False
+    ]
+
+    if negative_bot_indexes:
+        bot_index = negative_bot_indexes[-1]
+        for index in range(bot_index - 1, -1, -1):
+            if messages[index].get("role") == "user" and str(messages[index].get("content") or "").strip():
+                return messages[index]
+
+    for message in reversed(messages):
+        if message.get("role") == "user" and str(message.get("content") or "").strip():
+            return message
+
+    return messages[-1]
+
+
+def clean_message_content(content: str) -> str:
+    text = re.sub(r"\[(?:IMAGE|AUDIO)_URL:[^\]]+\]", "", content or "")
+    text = re.sub(r"Descrizione immagine:.*", "", text, flags=re.DOTALL)
+    text = re.sub(r"Testo estratto dall'immagine:.*", "", text, flags=re.DOTALL)
+    return re.sub(r"\s+", " ", text).strip()

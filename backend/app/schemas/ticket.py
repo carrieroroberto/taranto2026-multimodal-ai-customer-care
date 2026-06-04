@@ -17,7 +17,7 @@ TicketCategory = Literal[
     "unknown",
 ]
 
-TicketPriority = Literal["low", "medium", "high"]
+TicketPriority = Literal["bassa", "media", "alta", "low", "medium", "high"]
 
 
 class TicketDraftDTO(BaseModel):
@@ -32,13 +32,12 @@ class TicketRequestDTO(BaseModel):
     conversation_id: str
     user_email: str
     language: str | None = None
+    feedback_message_id: str | None = None
     session_id: str | None = None
     category: TicketCategory | None = None
     domain: str | None = None
     summary: str | None = None
     user_message: str | None = None
-    original_message: str | None = None
-    translated_message: str | None = None
     priority: TicketPriority | None = None
     contact_email: str | None = None
     contact_phone: str | None = None

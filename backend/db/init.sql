@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS operators (
 
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    ai_summary TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -17,8 +16,9 @@ CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     role TEXT NOT NULL CHECK (role IN ('user', 'bot')),
-    type TEXT DEFAULT 'text',
+    type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio')),
     content TEXT NOT NULL,
+    sources JSONB NOT NULL DEFAULT '[]'::jsonb,
     satisfaction BOOLEAN DEFAULT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -26,30 +26,14 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS tickets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'open',
-    priority TEXT DEFAULT 'medium',
-    domain TEXT DEFAULT 'general',
+    feedback_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'aperto',
+    priority TEXT DEFAULT 'media',
+    domain TEXT DEFAULT 'informazioni generali',
     user_email TEXT NOT NULL,
     summary TEXT NOT NULL,
-    ai_summary TEXT,
-    original_message TEXT NOT NULL,
-    translated_message TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS kb_sources (
-    id TEXT PRIMARY KEY,
-    kb_type TEXT NOT NULL,
-    domain_label TEXT NOT NULL,
-    title TEXT,
-    source_url TEXT,
-    search_text TEXT NOT NULL,
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS kb_source_domains (
-    label TEXT PRIMARY KEY,
-    source_count INTEGER NOT NULL DEFAULT 0,
-    updated_at TIMESTAMP DEFAULT NOW()
-);
+CREATE INDEX IF NOT EXISTS idx_tickets_feedback_message_id ON tickets(feedback_message_id);

@@ -22,15 +22,21 @@ logger = logging.getLogger(__name__)
 def ai_disabled_answer(language: str | None) -> str:
     match (language or "it").lower():
         case "en":
-            return "AI models are disabled in this local demo mode. I saved your message, but I cannot generate a grounded answer right now."
+            return "AI models are disabled in this mode. I saved your message, but I cannot generate a precise answer right now."
         case "es":
-            return "Los modelos de IA están desactivados en este modo local de demostración. He guardado tu messaggio, pero ahora no puedo generar una respuesta fundamentada."
+            return "Los modelos de IA están desactivados en esta modalidad. He guardado tu mensaje, pero ahora no puedo generar una respuesta precisa."
         case "fr":
-            return "Les modèles d'IA sont désactivés dans ce mode local de démonstration. J'ai enregistré votre message, maise ne peux pas générer une risposta affidabile per il momento."
+            return "Les modèles d'IA sont désactivés dans ce mode. J'ai enregistré votre message, mais je ne peux pas générer une réponse précise pour le moment."
         case "ar":
-            return "نماذج الذكاء الاصطناعي معطلة في وضع العرض المحلي. تم حفظ رسالتك، لكن لا يمكنني إنشاء إجابة موثوقة الآن."
+            return "نماذج الذكاء الاصطناعي معطلة في هذه الوضعية. تم حفظ رسالتك، لكن لا يمكنني إنشاء إجابة دقيقة الآن."
         case _:
-            return "I modelli AI sono disattivati in questa modalità demo locale. Ho salvato il tuo messaggio, ma al momento non posso generare una risposta grounded."
+            return "I modelli AI sono disattivati in questa modalità. Ho salvato il tuo messaggio, ma al momento non posso generare una risposta precisa."
+
+
+def groq_is_configured() -> bool:
+    api_key = (settings.groq_api_key or "").strip().strip('"').strip("'")
+    return bool(api_key and "your_groq" not in api_key.lower())
+
 
 async def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
     started_at = time.perf_counter()
@@ -45,12 +51,11 @@ async def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
         request.stored_user_content or message,
         request.message_type,
     )
-    
     ui_lang = normalize_language_code(request.language) if request.language else "it"
 
-    if settings.ai_disabled:
+    if settings.ai_disabled and not groq_is_configured():
         answer = ai_disabled_answer(ui_lang)
-        bot_message_row = save_bot_message(session_id, answer)
+        bot_message_row = save_bot_message(session_id, answer, [])
         return ChatResponseDTO(
             session_id=session_id,
             conversation_id=conversation_id,
@@ -85,7 +90,7 @@ async def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
 
     latency_ms = (time.perf_counter() - started_at) * 1000
     
-    bot_message_row = save_bot_message(session_id, answer)
+    bot_message_row = save_bot_message(session_id, answer, sources)
     
     response = ChatResponseDTO(
         session_id=session_id,
@@ -132,5 +137,5 @@ def build_ticket_draft(
         summary=message[:90],
         user_message=message,
         retrieved_context_summary=f"Reason: {reason}. Context: {context_summary}",
-        priority="medium"
+        priority="media"
     )

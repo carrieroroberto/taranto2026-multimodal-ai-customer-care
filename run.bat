@@ -10,8 +10,8 @@ if /I "%MODE%"=="lite" goto VALID_MODE
 if /I "%MODE%"=="full" goto VALID_MODE
 
 echo Uso:
-echo   run.bat lite   ^(senza servizi AI, default^)
-echo   run.bat full   ^(stack completo con Ollama e pull modello^)
+echo   run.bat lite   ^(Groq testuale, senza Ollama locale^)
+echo   run.bat full   ^(stack completo con Ollama, multimodale locale e fallback Groq^)
 echo.
 pause
 exit /b 1
@@ -42,7 +42,7 @@ pause
 exit /b 0
 
 :START_LITE
-echo Avvio TarAI senza servizi AI...
+echo Avvio TarAI in modalita lite: Groq testuale, senza Ollama locale...
 echo.
 
 docker compose stop llm llm-init >nul 2>&1
@@ -59,20 +59,20 @@ if errorlevel 1 goto START_ERROR
 exit /b 0
 
 :START_FULL
-echo Avvio TarAI completo con servizi AI...
+echo Avvio TarAI completo con Ollama locale, multimodale e fallback Groq...
 echo.
 
-docker compose up -d --build --force-recreate --no-deps database pgadmin vector-db llm > "%START_LOG%" 2>&1
+docker compose up -d --build --force-recreate database pgadmin vector-db llm > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
 call :WAIT_HEALTH tarai-database 120
 if errorlevel 1 goto START_ERROR
 
 echo Verifico/scarico modello LLM configurato...
-docker compose up --build --force-recreate --no-deps llm-init
+docker compose up --build --force-recreate llm-init
 if errorlevel 1 goto START_ERROR
 
-docker compose up -d --build --force-recreate --no-deps backend frontend cloudflared > "%START_LOG%" 2>&1
+docker compose up -d --build --force-recreate backend frontend cloudflared > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
 exit /b 0

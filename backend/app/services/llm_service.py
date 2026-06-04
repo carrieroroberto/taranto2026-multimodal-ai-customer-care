@@ -19,14 +19,66 @@ from backend.app.services.rag_service import (
     to_context,
 )
 from backend.app.schemas.chat import ChatRequestDTO, ChatResponseDTO, SourceDTO, TicketDraftDTO
-from backend.app.services.rag_service import parse_retrieval_queries, translate_static_answer
+from backend.app.services.rag_service import parse_retrieval_queries
 from groq import AsyncGroq
 
 logger = logging.getLogger(__name__)
 
-QUERY_PLAN_SYSTEM_PROMPT = """Sei un analista di query per i Giochi del Mediterraneo Taranto 2026.
-Il tuo compito è analizzare la domanda dell'utente e produrre un piano di ricerca strutturato in JSON.
-Identifica l'intento, i domini coinvolti, le entità e la lingua della risposta.
+QUERY_PLAN_SYSTEM_PROMPT = """Sei il Query Planner LLM di TARA per i Giochi del Mediterraneo Taranto 2026.
+Devi restituire solo JSON valido, senza markdown e senza spiegazioni.
+
+Compiti:
+- rileva la lingua effettiva del messaggio utente tra: it, en, es, fr, ar;
+- la lingua va rilevata da zero sul messaggio corrente: NON copiarla dalla lingua UI e NON copiarla dalla cronologia;
+- se il messaggio corrente e' chiaramente in una delle lingue supportate, usa quella lingua anche se la UI corrente e' diversa;
+- usa la lingua UI corrente solo se il messaggio e' ambiguo, troppo corto o in una lingua non supportata;
+- traduci semanticamente la richiesta in italiano per la ricerca nella knowledge base;
+- correggi refusi evidenti;
+- produci query di retrieval sempre in italiano;
+- non inventare fatti, date, prezzi, sedi, link o risultati.
+
+Schema JSON obbligatorio:
+{
+  "language": "it|en|es|fr|ar",
+  "intent": "general_information|ticketing|venue_information|calendar|volunteering|accessibility",
+  "domains": ["general|ticketing|venue|calendar|volunteering|accessibility"],
+  "query_it": "richiesta tradotta e normalizzata in italiano",
+  "entities": {
+    "sport": null,
+    "venue": null,
+    "atleta": null,
+    "data": null
+  },
+  "retrieval_queries": [
+    {"query": "query in italiano", "domain": "general|ticketing|venue|calendar|volunteering|accessibility|null", "weight": 1.0}
+  ],
+  "needs_clarification": false,
+  "clarification_question": null
+}
+
+Regole:
+- massimo 4 retrieval_queries;
+- language deve indicare la lingua in cui rispondere;
+- query_it e retrieval_queries devono essere in italiano anche se il messaggio utente e' in inglese, spagnolo, francese o arabo.
+
+Esempi di rilevamento:
+- "Where can I buy tickets?" => language "en", query_it "Dove posso comprare i biglietti?"
+- "Donde se celebra la ceremonia de apertura?" => language "es", query_it "Dove si svolge la cerimonia di apertura?"
+- "Je veux savoir si les billets sont gratuits" => language "fr", query_it "Voglio sapere se i biglietti sono gratuiti"
+- "متى تبدأ الألعاب؟" => language "ar", query_it "Quando iniziano i Giochi?"
+- "Quando iniziano i Giochi?" => language "it", query_it "Quando iniziano i Giochi?"
+"""
+
+FALLBACK_LANGUAGE_QUERY_PROMPT = """Analizza il messaggio utente e restituisci solo JSON valido.
+Devi rilevare la lingua del messaggio corrente tra it, en, es, fr, ar e produrre la query italiana per il retrieval.
+Non usare la lingua UI se il messaggio corrente e' chiaramente in una lingua supportata.
+Usa la lingua UI solo se il messaggio e' ambiguo o in lingua non supportata.
+
+Schema:
+{
+  "language": "it|en|es|fr|ar",
+  "query_it": "messaggio tradotto e normalizzato in italiano"
+}
 """
 
 VALID_INTENTS = {"general_information", "ticketing", "venue_information", "calendar", "volunteering", "accessibility"}
@@ -73,6 +125,14 @@ async def call_groq(messages: List[Dict[str, str]], timeout: float = 30.0) -> st
 async def smart_llm_call(payload: dict[str, Any], system_prompt_text: str = None) -> str:
     """Calls local Ollama with a timeout, falling back to Groq if it takes too long."""
     ollama_timeout = settings.llm_fallback_timeout_seconds
+    api_key = (settings.groq_api_key or "").strip().strip('"').strip("'")
+
+    if api_key and (settings.ai_disabled or ollama_timeout <= 0):
+        logger.info("Groq key configured and local AI disabled or fallback timeout <= 0: skipping local Ollama.")
+        return await call_groq(
+            ollama_payload_to_groq_messages(payload, system_prompt_text),
+            timeout=max(float(settings.llm_timeout_seconds), 30.0),
+        )
     
     try:
         # Try local Ollama first with a strict timeout for fallback
@@ -85,20 +145,12 @@ async def smart_llm_call(payload: dict[str, Any], system_prompt_text: str = None
         is_timeout = isinstance(exc, (asyncio.TimeoutError, httpx.TimeoutException)) or "timeout" in str(exc).lower()
         
         # Check if we can fallback to Groq
-        api_key = (settings.groq_api_key or "").strip().strip('"').strip("'")
         if api_key:
             logger.warning("Local LLM failed or slow (%s), falling back to Groq...", type(exc).__name__)
-            # Reconstruct messages for Groq (OpenAI format)
-            groq_messages = []
-            if system_prompt_text:
-                groq_messages.append({"role": "system", "content": system_prompt_text})
-            
-            # Extract user messages from Ollama payload
-            for msg in payload.get("messages", []):
-                if msg.get("role") != "system":
-                    groq_messages.append({"role": msg["role"], "content": msg["content"]})
-            
-            return await call_groq(groq_messages)
+            return await call_groq(
+                ollama_payload_to_groq_messages(payload, system_prompt_text),
+                timeout=max(float(settings.llm_timeout_seconds), 30.0),
+            )
         else:
             # If no Groq, just wait longer for Ollama if it was a timeout, or re-raise
             if is_timeout:
@@ -109,7 +161,37 @@ async def smart_llm_call(payload: dict[str, Any], system_prompt_text: str = None
             
     return ""
 
-async def build_query_plan(message: str, history: list[dict[str, Any]] | None = None) -> QueryPlan:
+
+def ollama_payload_to_groq_messages(
+    payload: dict[str, Any],
+    system_prompt_text: str | None = None,
+) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
+
+    if system_prompt_text:
+        messages.append({"role": "system", "content": system_prompt_text})
+
+    for message in payload.get("messages", []):
+        role = message.get("role") or "user"
+        if role not in {"system", "user", "assistant"}:
+            role = "user"
+        if role == "system" and system_prompt_text:
+            continue
+
+        content = str(message.get("content") or "")
+        if role == "user" and system_prompt_text and content.startswith(system_prompt_text):
+            content = content[len(system_prompt_text):].lstrip()
+        if content:
+            messages.append({"role": role, "content": content})
+
+    return messages or [{"role": "user", "content": ""}]
+
+async def build_query_plan(
+    message: str,
+    history: list[dict[str, Any]] | None = None,
+    ui_language: str = "it",
+) -> QueryPlan:
+    fallback_language = normalize_language_code(ui_language)
     history_context = ""
     if history:
         history_context = "Cronologia recente:\n" + "\n".join(
@@ -119,7 +201,15 @@ async def build_query_plan(message: str, history: list[dict[str, Any]] | None = 
     payload = {
         "model": settings.ollama_model,
         "messages": [
-            {"role": "user", "content": f"{QUERY_PLAN_SYSTEM_PROMPT}\n\n{history_context}Domanda utente: {message}"},
+            {"role": "system", "content": QUERY_PLAN_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    f"Lingua UI corrente: {fallback_language}\n"
+                    f"{history_context}"
+                    f"Domanda utente: {message}"
+                ),
+            },
         ],
         "stream": False,
         "options": {
@@ -131,40 +221,64 @@ async def build_query_plan(message: str, history: list[dict[str, Any]] | None = 
     try:
         content = await smart_llm_call(payload, system_prompt_text=QUERY_PLAN_SYSTEM_PROMPT)
         plan_data = parse_json_object(content)
+        if not plan_data:
+            raise ValueError("Query planner returned empty JSON.")
+        response_language = normalize_language_code(
+            plan_data.get("language")
+            or plan_data.get("response_language")
+            or fallback_language,
+            fallback_language,
+        )
+        domains = normalize_domains(plan_data.get("domains", []), "general")
+        query_it = first_non_empty(
+            plan_data.get("query_it"),
+            plan_data.get("normalized_query"),
+            plan_data.get("retrieval_query"),
+        )
+        if not query_it:
+            raise ValueError("Query planner did not return query_it.")
+        expanded_queries = italian_query_list(plan_data.get("expanded_queries"), query_it)
+        retrieval_queries = parse_retrieval_queries(
+            plan_data.get("retrieval_queries"), query_it, domains
+        )
         
         return QueryPlan(
             original_query=message,
-            retrieval_query=message,
-            domain=normalize_domains(plan_data.get("domains", []), "general")[0],
-            filters=[],
-            expanded_queries=[message],
+            retrieval_query=query_it,
+            domain=domains[0],
+            filters=string_list(plan_data.get("filters")),
+            expanded_queries=expanded_queries,
             intent=normalize_intent(plan_data.get("intent", "general_information")),
-            domains=normalize_domains(plan_data.get("domains", []), "general"),
-            retrieval_queries=parse_retrieval_queries(
-                plan_data.get("retrieval_queries"), message, ["general"]
-            ),
+            domains=domains,
+            retrieval_queries=retrieval_queries,
             entities=normalized_entities(plan_data.get("entities", {})),
-            response_language=normalize_language_code(plan_data.get("response_language", "it")),
+            response_language=response_language,
             needs_clarification=bool(plan_data.get("needs_clarification", False)),
             clarification_question=optional_string(plan_data.get("clarification_question")),
         )
     except Exception as exc:
         logger.warning("query_plan_fallback error=%s", exc)
-        return fallback_query_plan(message)
+        fallback_query, detected_language = await fallback_query_analysis(message, fallback_language)
+        return fallback_query_plan(message, fallback_query, detected_language)
 
 
-def fallback_query_plan(message: str) -> QueryPlan:
+def fallback_query_plan(
+    message: str,
+    retrieval_query: str | None = None,
+    response_language: str = "it",
+) -> QueryPlan:
+    query_it = (retrieval_query or message).strip() or message
     return QueryPlan(
         original_query=message,
-        retrieval_query=message,
+        retrieval_query=query_it,
         domain="general",
         filters=[],
-        expanded_queries=[message],
+        expanded_queries=[query_it],
         intent="general_information",
         domains=["general"],
-        retrieval_queries=[PlannedRetrievalQuery(query=message, domain=None, weight=1.0)],
+        retrieval_queries=[PlannedRetrievalQuery(query=query_it, domain=None, weight=1.0)],
         entities={k: None for k in ENTITY_KEYS},
-        response_language="it",
+        response_language=normalize_language_code(response_language),
         needs_clarification=False,
     )
 
@@ -253,6 +367,7 @@ def is_refusal_answer(answer: str) -> bool:
         "i don't have enough information",
         "non posso rispondere",
         "inserisci l'email",
+        "scrivi la tua email",
         "enter your email",
         "verrai ricontattato da un operatore"
     ]
@@ -261,11 +376,11 @@ def is_refusal_answer(answer: str) -> bool:
 
 def human_operator_answer(response_language: str = "it") -> str:
     answers = {
-        "it": "Certo, inserisci l'email qui sotto nella casella di testo e verrai ricontattato da un operatore umano il prima possibile.",
-        "en": "Sure, enter your email in the text box below and you will be contacted by a human operator as soon as possible.",
-        "es": "Claro, ingresa tu correo electrónico in il quadro di testo a continuación e un operatore umano si metterà in contatto con te il prima possibile.",
-        "fr": "Bien sûr, saisissez votre e-mail nella zone de texte ci-dessous et vous serez contacté par un opérateur humain dès que possible.",
-        "ar": "بالتأكيد، أدخل بريدك الإلكتروني in مربع النص أدناه وسيتصل بك موظف بشري in أقرب وقت ممکن."
+        "it": "Certo, scrivi la tua email nella casella di testo e verrai ricontattato da un operatore umano il prima possibile.",
+        "en": "Sure, write your email in the text box and you will be contacted by a human operator as soon as possible.",
+        "es": "Claro, escribe tu correo electrónico en el cuadro de texto y un operador humano se pondrá en contacto contigo lo antes posible.",
+        "fr": "Bien sûr, écrivez votre adresse e-mail dans la zone de texte et un opérateur humain vous recontactera dès que possible.",
+        "ar": "بالتأكيد، اكتب بريدك الإلكتروني في مربع النص وسيتم التواصل معك من قبل موظف في أقرب وقت ممكن."
     }
     lang = normalize_language_code(response_language)
     return answers.get(lang, answers["it"])
@@ -284,12 +399,34 @@ def unavailable_answer(response_language: str = "it") -> str:
 
 
 def ticketing_guardrail_answer(response_language: str = "it") -> str:
-    answer = (
-        "Al momento i biglietti per Taranto 2026 non risultano ancora disponibili. "
-        "Non sono ancora pubblicati ufficialmente prezzi, canali di acquisto, "
-        "disponibilita o distinzione tra eventi gratuiti e a pagamento."
-    )
-    return translate_static_answer(answer, response_language)
+    answers = {
+        "it": (
+            "Al momento i biglietti per Taranto 2026 non risultano ancora disponibili. "
+            "Non sono ancora pubblicati ufficialmente prezzi, canali di acquisto, "
+            "disponibilita o distinzione tra eventi gratuiti e a pagamento."
+        ),
+        "en": (
+            "Tickets for Taranto 2026 are not available yet. Official prices, "
+            "purchase channels, availability and the distinction between free and paid events "
+            "have not been published yet."
+        ),
+        "es": (
+            "Las entradas para Taranto 2026 aun no estan disponibles. Todavia no se han publicado "
+            "precios oficiales, canales de compra, disponibilidad ni la distincion entre eventos "
+            "gratuitos y de pago."
+        ),
+        "fr": (
+            "Les billets pour Taranto 2026 ne sont pas encore disponibles. Les prix officiels, "
+            "les canaux d'achat, la disponibilite et la distinction entre evenements gratuits "
+            "et payants n'ont pas encore ete publies."
+        ),
+        "ar": (
+            "تذاكر تارانتو 2026 غير متاحة بعد. لم يتم نشر الأسعار الرسمية أو قنوات الشراء "
+            "أو التوفر أو التمييز بين الفعاليات المجانية والمدفوعة حتى الآن."
+        ),
+    }
+    lang = normalize_language_code(response_language)
+    return answers.get(lang, answers["it"])
 
 
 def build_user_prompt(
@@ -351,10 +488,14 @@ def strip_markdown(text: str) -> str:
     return text.replace("**", "").replace("*", "").replace("__", "").replace("_", "")
 
 
-def normalize_language_code(code: str) -> str:
-    if not code: return "it"
+def normalize_language_code(code: str | None, fallback: str = "it") -> str:
+    fallback = (fallback or "it").lower()[:2]
+    if fallback not in LANGUAGE_NAMES:
+        fallback = "it"
+    if not code:
+        return fallback
     code = code.lower()[:2]
-    return code if code in LANGUAGE_NAMES else "it"
+    return code if code in LANGUAGE_NAMES else fallback
 
 
 def response_language_name(code: str) -> str:
@@ -364,6 +505,69 @@ def response_language_name(code: str) -> str:
 def optional_string(value: Any) -> str | None:
     if not value: return None
     return str(value).strip() or None
+
+
+def first_non_empty(*values: Any) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item or "").strip()]
+
+
+def italian_query_list(value: Any, query_it: str) -> list[str]:
+    queries = string_list(value)
+    if query_it and query_it not in queries:
+        queries.insert(0, query_it)
+    return queries or [query_it]
+
+
+async def fallback_retrieval_query_it(message: str) -> str:
+    try:
+        translated = await translate_text(message, "it")
+        return translated.strip() or message
+    except Exception as exc:
+        logger.warning("fallback query translation failed: %s", exc)
+        return message
+
+
+async def fallback_query_analysis(message: str, ui_language: str) -> tuple[str, str]:
+    payload = {
+        "model": settings.ollama_model,
+        "messages": [
+            {"role": "system", "content": FALLBACK_LANGUAGE_QUERY_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    f"Lingua UI corrente: {normalize_language_code(ui_language)}\n"
+                    f"Messaggio utente: {message}"
+                ),
+            },
+        ],
+        "stream": False,
+        "options": {
+            "temperature": 0,
+            "num_predict": 180,
+        },
+    }
+
+    try:
+        content = await smart_llm_call(payload, system_prompt_text=FALLBACK_LANGUAGE_QUERY_PROMPT)
+        data = parse_json_object(content)
+        language = normalize_language_code(data.get("language"), ui_language)
+        query_it = first_non_empty(data.get("query_it"), data.get("italian_query"))
+        if query_it:
+            return query_it, language
+    except Exception as exc:
+        logger.warning("fallback language/query analysis failed: %s", exc)
+
+    return await fallback_retrieval_query_it(message), normalize_language_code(ui_language)
 
 
 def normalize_text(text: str) -> str:
@@ -384,10 +588,6 @@ def normalize_domains(domains: list[str], default: str) -> list[str]:
 
 def normalized_entities(entities: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in entities.items() if k in ENTITY_KEYS}
-
-def detect_message_language(message: str, fallback: str = "it") -> str:
-    return normalize_language_code(fallback)
-
 
 def normalize_required_message(value: str) -> str:
     message = str(value or "").strip()
@@ -415,23 +615,78 @@ async def translate_text(text: str, target_lang: str = "it") -> str:
         logger.warning("Translation failed: %s", exc)
         return text
 
-async def generate_conversation_summary(messages: list[dict[str, Any]]) -> str:
-    """Generates a concise summary of the conversation with fallback."""
+async def generate_conversation_summary(
+    messages: list[dict[str, Any]],
+    escalation_message: dict[str, Any] | None = None,
+) -> str:
+    """Generates a concise operator summary focused on the escalation trigger."""
     if not messages:
         return "Nessuna conversazione."
-        
-    history_text = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
+
+    escalation_text = clean_summary_message_text(
+        str((escalation_message or {}).get("content") or "")
+    )
+    if not escalation_text:
+        user_messages = [
+            clean_summary_message_text(str(message.get("content") or ""))
+            for message in messages
+            if message.get("role") == "user"
+        ]
+        escalation_text = next((message for message in reversed(user_messages) if message), "")
+
+    recent_messages = messages[-8:]
+    history_text = "\n".join(
+        f"{message.get('role', 'messaggio')}: {clean_summary_message_text(str(message.get('content') or ''))}"
+        for message in recent_messages
+        if clean_summary_message_text(str(message.get("content") or ""))
+    )
     payload = {
         "model": settings.ollama_model,
         "messages": [
-            {"role": "user", "content": f"Riassumi in italiano la chat (max 2 frasi):\n\n{history_text}"}
+            {
+                "role": "user",
+                "content": (
+                    "Scrivi un summary operativo in italiano per un ticket customer-care.\n"
+                    "Rispondi SOLO con il riassunto finale, senza introduzioni, senza frasi come "
+                    "'Ecco un riassunto', senza markdown e senza preamboli.\n"
+                    "Il riassunto deve concentrarsi soprattutto sul messaggio che ha generato "
+                    "l'escalation; usa la cronologia solo come contesto secondario.\n"
+                    "Massimo 2 frasi brevi.\n\n"
+                    f"MESSAGGIO CHE HA GENERATO L'ESCALATION:\n{escalation_text}\n\n"
+                    f"CRONOLOGIA RECENTE:\n{history_text}"
+                ),
+            }
         ],
         "stream": False,
-        "options": {"temperature": 0}
+        "options": {"temperature": 0, "num_predict": 220}
     }
     try:
         content = await smart_llm_call(payload)
-        return strip_thinking(content).strip()
+        return clean_summary_response(strip_thinking(content).strip())
     except Exception as exc:
         logger.warning("Summary generation failed: %s", exc)
         return "Impossibile generare riassunto."
+
+
+def clean_summary_response(text: str) -> str:
+    summary = strip_markdown(text or "").strip()
+    summary = re.sub(
+        r"^(?:ecco\s+)?(?:un\s+)?riassunto(?:\s+della\s+chat)?(?:\s+in\s+italiano)?(?:\s+in\s+\d+\s+frasi?)?\s*[:\-]\s*",
+        "",
+        summary,
+        flags=re.IGNORECASE,
+    ).strip()
+    summary = re.sub(
+        r"^summary(?:\s+operativo)?\s*[:\-]\s*",
+        "",
+        summary,
+        flags=re.IGNORECASE,
+    ).strip()
+    return summary
+
+
+def clean_summary_message_text(content: str) -> str:
+    text = re.sub(r"\[(?:IMAGE|AUDIO)_URL:[^\]]+\]", "", content or "")
+    text = re.sub(r"Descrizione immagine:.*", "", text, flags=re.DOTALL)
+    text = re.sub(r"Testo estratto dall'immagine:.*", "", text, flags=re.DOTALL)
+    return re.sub(r"\s+", " ", text).strip()

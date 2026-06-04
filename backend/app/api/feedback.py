@@ -9,10 +9,13 @@ router = APIRouter(tags=["feedback"])
 
 @router.post("/feedback", status_code=status.HTTP_201_CREATED)
 def post_feedback(feedback: FeedbackRequestDTO):
-    updated = save_feedback(feedback.model_dump())
-    if not updated:
-        raise HTTPException(status_code=404, detail="Bot message not found.")
-    return {"status": "ok", "message": "Feedback received"}
+    try:
+        updated = save_feedback(feedback.model_dump())
+        if not updated:
+            raise HTTPException(status_code=404, detail="Bot message not found.")
+        return {"status": "ok", "message": "Feedback received"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/messages/{message_id}/feedback")

@@ -149,7 +149,7 @@ Variabili principali:
 | `OLLAMA_MODEL` | Modello usato dal backend |
 | `QUERY_PARSER_MODEL` | Modello usato dal query planner |
 | `USE_LLM_QUERY_PARSER` | Abilita il planner LLM |
-| `AI_DISABLED` | Disattiva i modelli AI e usa una risposta demo salvando comunque conversazioni e messaggi |
+| `AI_DISABLED` | Disattiva i modelli AI locali. Se `GROQ_API_KEY` e' configurata usa Groq testuale; altrimenti usa una risposta demo salvando comunque conversazioni e messaggi |
 | `VITE_API_BASE_URL` | Base API del frontend, di default `/api` |
 | `VITE_PROXY_TARGET` | Target proxy Vite verso il backend |
 
@@ -171,7 +171,7 @@ Di default equivale a:
 run.bat lite
 ```
 
-La modalita' `lite` avvia frontend, backend, Postgres, pgAdmin, ChromaDB e tunnel Cloudflare, ma non avvia i servizi AI `llm` e `llm-init`. Il backend salva comunque conversazioni e messaggi nel database e risponde con un fallback demo.
+La modalita' `lite` avvia frontend, backend, Postgres, pgAdmin, ChromaDB e tunnel Cloudflare, ma non avvia i servizi AI locali `llm` e `llm-init`. Con `GROQ_API_KEY` configurata usa Groq per la generazione testuale; senza chiave Groq salva comunque conversazioni e messaggi nel database e risponde con fallback demo.
 
 Per la versione completa con modelli AI locali:
 
@@ -179,7 +179,7 @@ Per la versione completa con modelli AI locali:
 run.bat full
 ```
 
-La modalita' `full` avvia anche Ollama, verifica/scarica il modello configurato e abilita la pipeline RAG completa.
+La modalita' `full` avvia anche Ollama, verifica/scarica il modello configurato e abilita la pipeline RAG completa con modelli locali e multimodalita'. Groq resta fallback in base a `LLM_FALLBACK_TIMEOUT_SECONDS`.
 
 Dalla root del progetto:
 

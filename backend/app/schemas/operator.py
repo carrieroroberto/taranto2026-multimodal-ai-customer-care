@@ -26,4 +26,4 @@ class LogoutResponseDTO(BaseModel):
 
 
 class TicketStatusUpdateDTO(BaseModel):
-    status: Literal["open", "in_progress", "closed"]
+    status: Literal["aperto", "chiuso", "open", "closed"]

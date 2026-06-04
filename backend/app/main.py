@@ -11,8 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.app.api.routes import router
 from backend.app.config import settings
 from backend.app.repositories.database import init_database
-from backend.app.repositories.rag_repository import load_jsonl
-from backend.app.repositories.persistence_repository import ensure_default_operator, sync_kb_sources
+from backend.app.repositories.persistence_repository import ensure_default_operator
 from backend.app.services.auth_service import get_password_hash
 from backend.app.services.errors import AppServiceError
 from backend.app.services.rag_service import start_knowledge_base_startup_task
@@ -27,11 +26,6 @@ os.makedirs(UPLOADS_DIR, exist_ok=True)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_database()
-    try:
-        synced_sources = sync_kb_sources(load_jsonl(settings.kb_path))
-        logger.info("kb relational sources synced: %s", synced_sources)
-    except Exception as exc:
-        logger.warning("kb relational source sync skipped: %s", exc)
     
     # Seed default operator
     if settings.default_operator_email and settings.default_operator_password:

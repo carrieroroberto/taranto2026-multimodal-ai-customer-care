@@ -24,11 +24,10 @@ SCHEMA_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS conversations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        ai_summary TEXT,
         created_at TIMESTAMP DEFAULT NOW()
     );
     """,
-    "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ai_summary TEXT;",
+    "ALTER TABLE conversations DROP COLUMN IF EXISTS ai_summary;",
     """
     CREATE TABLE IF NOT EXISTS messages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -36,6 +35,7 @@ SCHEMA_STATEMENTS = (
         role TEXT NOT NULL CHECK (role IN ('user', 'bot')),
         type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio')),
         content TEXT NOT NULL,
+        sources JSONB NOT NULL DEFAULT '[]'::jsonb,
         satisfaction BOOLEAN DEFAULT NULL,
         created_at TIMESTAMP DEFAULT NOW()
     );
@@ -43,6 +43,10 @@ SCHEMA_STATEMENTS = (
     """
     ALTER TABLE messages
     ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text';
+    """,
+    """
+    ALTER TABLE messages
+    ADD COLUMN IF NOT EXISTS sources JSONB NOT NULL DEFAULT '[]'::jsonb;
     """,
     """
     UPDATE messages
@@ -86,60 +90,122 @@ SCHEMA_STATEMENTS = (
     CREATE TABLE IF NOT EXISTS tickets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-        status TEXT NOT NULL DEFAULT 'open',
+        feedback_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'aperto',
         priority TEXT,
         domain TEXT,
         user_email TEXT NOT NULL,
         summary TEXT NOT NULL,
-        ai_summary TEXT,
-        original_message TEXT NOT NULL,
-        translated_message TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     );
     """,
+    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS feedback_message_id UUID REFERENCES messages(id) ON DELETE SET NULL;",
     """
-    CREATE TABLE IF NOT EXISTS kb_sources (
-        id TEXT PRIMARY KEY,
-        kb_type TEXT NOT NULL,
-        domain_label TEXT NOT NULL,
-        title TEXT,
-        source_url TEXT,
-        search_text TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT NOW()
-    );
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'tickets'
+              AND column_name = 'feedback_message_id'
+        ) AND EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'messages'
+              AND column_name = 'ticket_opened'
+        ) THEN
+            UPDATE tickets t
+            SET feedback_message_id = (
+                SELECT m.id
+                FROM messages m
+                WHERE m.conversation_id = t.conversation_id
+                  AND m.role = 'bot'
+                  AND m.ticket_opened IS TRUE
+                ORDER BY m.created_at DESC
+                LIMIT 1
+            )
+            WHERE t.feedback_message_id IS NULL;
+        END IF;
+    END $$;
     """,
-    """
-    CREATE TABLE IF NOT EXISTS kb_source_domains (
-        label TEXT PRIMARY KEY,
-        source_count INTEGER NOT NULL DEFAULT 0,
-        updated_at TIMESTAMP DEFAULT NOW()
-    );
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS idx_kb_sources_domain_label
-    ON kb_sources (domain_label);
-    """,
-    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ai_summary TEXT;",
     "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();",
+    "CREATE INDEX IF NOT EXISTS idx_tickets_feedback_message_id ON tickets(feedback_message_id);",
+    "ALTER TABLE messages DROP COLUMN IF EXISTS ticket_opened;",
+    "ALTER TABLE tickets DROP COLUMN IF EXISTS ai_summary;",
+    "ALTER TABLE tickets DROP COLUMN IF EXISTS original_message;",
+    "ALTER TABLE tickets DROP COLUMN IF EXISTS translated_message;",
     """
     UPDATE tickets
-    SET ai_summary = summary
-    WHERE ai_summary IS NULL OR btrim(ai_summary) = '';
+    SET status = CASE LOWER(TRIM(status))
+        WHEN 'open' THEN 'aperto'
+        WHEN 'aperto' THEN 'aperto'
+        WHEN 'in_progress' THEN 'aperto'
+        WHEN 'in progress' THEN 'aperto'
+        WHEN 'in_lavorazione' THEN 'aperto'
+        WHEN 'in lavorazione' THEN 'aperto'
+        WHEN 'closed' THEN 'chiuso'
+        WHEN 'chiuso' THEN 'chiuso'
+        ELSE 'aperto'
+    END;
     """,
     """
-    UPDATE conversations c
-    SET ai_summary = t.ai_summary
-    FROM (
-        SELECT DISTINCT ON (conversation_id)
-            conversation_id,
-            ai_summary
-        FROM tickets
-        WHERE ai_summary IS NOT NULL AND btrim(ai_summary) <> ''
-        ORDER BY conversation_id, created_at DESC
-    ) AS t
-    WHERE c.id = t.conversation_id
-      AND (c.ai_summary IS NULL OR btrim(c.ai_summary) = '');
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'tickets_status_valid'
+        ) THEN
+            ALTER TABLE tickets
+            ADD CONSTRAINT tickets_status_valid
+            CHECK (status IN ('aperto', 'chiuso'));
+        END IF;
+    END $$;
+    """,
+    """
+    UPDATE tickets
+    SET priority = CASE LOWER(TRIM(COALESCE(priority, '')))
+        WHEN 'low' THEN 'bassa'
+        WHEN 'bassa' THEN 'bassa'
+        WHEN 'medium' THEN 'media'
+        WHEN 'media' THEN 'media'
+        WHEN 'high' THEN 'alta'
+        WHEN 'alta' THEN 'alta'
+        ELSE 'media'
+    END;
+    """,
+    """
+    UPDATE tickets
+    SET domain = CASE LOWER(TRIM(COALESCE(domain, '')))
+        WHEN 'general' THEN 'informazioni generali'
+        WHEN 'general_information' THEN 'informazioni generali'
+        WHEN 'games general' THEN 'informazioni generali'
+        WHEN 'games_general' THEN 'informazioni generali'
+        WHEN 'unknown' THEN 'informazioni generali'
+        WHEN 'ticketing' THEN 'biglietteria'
+        WHEN 'venue' THEN 'impianti'
+        WHEN 'venue_information' THEN 'impianti'
+        WHEN 'event_schedule' THEN 'calendario'
+        WHEN 'calendar' THEN 'calendario'
+        WHEN 'schedule' THEN 'calendario'
+        WHEN 'transport' THEN 'trasporti'
+        WHEN 'accessibility' THEN 'accessibilita'
+        WHEN 'volunteering' THEN 'volontariato'
+        WHEN 'volunteers' THEN 'volontariato'
+        WHEN 'contacts' THEN 'contatti'
+        WHEN 'complaint' THEN 'reclamo'
+        WHEN 'partnership' THEN 'partnership'
+        WHEN 'school_project' THEN 'progetto scuola'
+        WHEN 'tender_notice' THEN 'bandi e avvisi'
+        WHEN 'organizing committee' THEN 'comitato organizzatore'
+        WHEN 'organizing_committee' THEN 'comitato organizzatore'
+        WHEN 'historical results page' THEN 'risultati storici'
+        WHEN 'historical_results_page' THEN 'risultati storici'
+        WHEN 'sport' THEN 'sport'
+        WHEN 'faq' THEN 'faq'
+        ELSE 'informazioni generali'
+    END;
     """,
 )
 

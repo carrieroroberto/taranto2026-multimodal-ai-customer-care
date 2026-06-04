@@ -170,7 +170,8 @@ function MessageFeedback({ disabled, message, t, onFeedback }) {
   }
 
   // Se 'disabled' è true, aggiungiamo la classe 'is-disabled' che grigisce tutto
-  const containerClassName = disabled ? "message-feedback is-disabled" : "message-feedback";
+  const isDisabled = disabled || message.feedbackLocked;
+  const containerClassName = isDisabled ? "message-feedback is-disabled" : "message-feedback";
 
   return (
     <div className={containerClassName} aria-label={t.feedbackLabel}>
@@ -184,13 +185,11 @@ function MessageFeedback({ disabled, message, t, onFeedback }) {
         type="button"
         aria-pressed={message.satisfaction === true}
         aria-label={t.feedbackPositive}
-        disabled={disabled}
+        disabled={isDisabled}
         title={t.feedbackPositive}
         onClick={() => onFeedback?.(message, true)}
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M2 21h4V9H2v12Zm20-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L13.17 1 6.59 7.59C6.22 7.95 6 8.45 6 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2Z" />
-        </svg>
+        <span className="feedback-emoji feedback-emoji-positive" data-emoji="👍🏻" aria-hidden="true" />
       </button>
       <button
         className={
@@ -201,13 +200,11 @@ function MessageFeedback({ disabled, message, t, onFeedback }) {
         type="button"
         aria-pressed={message.satisfaction === false}
         aria-label={t.feedbackNegative}
-        disabled={disabled}
+        disabled={isDisabled}
         title={t.feedbackNegative}
         onClick={() => onFeedback?.(message, false)}
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M22 3h-4v12h4V3ZM2 14c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L10.83 23l6.58-6.59c.37-.36.59-.86.59-1.41V5c0-1.1-.9-2-2-2H7c-.83 0-1.54.5-1.84 1.22L2.14 11.27c-.09.23-.14.47-.14.73v2Z" />
-        </svg>
+        <span className="feedback-emoji feedback-emoji-negative" data-emoji="👎🏻" aria-hidden="true" />
       </button>
     </div>
   );
@@ -236,33 +233,10 @@ function WelcomeSuggestions({ disabled, questions, onSuggestionClick }) {
 }
 
 function TextWithInlineSources({ className, sources, text }) {
-  const match = text.match(/(\S+)(\s*)$/);
-
-  if (!match) {
-    return (
-      <span className={className}>
-        <span className="message-inline-tail">
-          <SourceFavicons sources={sources} />
-        </span>
-      </span>
-    );
-  }
-
-  const lastWord = match[1];
-  const trailingWhitespace = match[2];
-  const prefix = text.slice(
-    0,
-    text.length - lastWord.length - trailingWhitespace.length,
-  );
-
   return (
-    <span className={className}>
-      {prefix}
-      <span className="message-inline-tail">
-        {lastWord}
-        {trailingWhitespace}
-        <SourceFavicons sources={sources} />
-      </span>
+    <span className={className ? `${className} message-text-with-sources` : "message-text-with-sources"}>
+      <span>{text}</span>
+      <SourceFavicons sources={sources} />
     </span>
   );
 }

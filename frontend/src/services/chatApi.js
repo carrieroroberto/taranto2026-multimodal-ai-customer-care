@@ -86,7 +86,35 @@ export async function sendFeedback({ sessionId, messageId, satisfied }) {
   return payload;
 }
 
-export async function sendTicket({ conversationId, userEmail, language }) {
+export async function updateMessageFeedback({ messageId, satisfaction }) {
+  const response = await fetchWithTimeout(
+    `${DEFAULT_API_BASE}/messages/${encodeURIComponent(messageId)}/feedback`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ satisfaction }),
+      timeoutMs: 30000,
+    },
+  );
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
+export async function sendTicket({
+  conversationId,
+  feedbackMessageId,
+  userEmail,
+  language,
+  signal,
+}) {
   const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/tickets`, {
     method: "POST",
     headers: {
@@ -94,10 +122,12 @@ export async function sendTicket({ conversationId, userEmail, language }) {
     },
     body: JSON.stringify({
       conversation_id: conversationId,
+      feedback_message_id: feedbackMessageId || null,
       user_email: userEmail,
       language,
     }),
     timeoutMs: 30000,
+    signal,
   });
 
   const payload = await parseJsonResponse(response);

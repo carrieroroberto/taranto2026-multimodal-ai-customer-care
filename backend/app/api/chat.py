@@ -3,6 +3,7 @@ import uuid
 from typing import Annotated
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
+from backend.app.config import settings
 from backend.app.schemas import ChatRequestDTO, ChatResponseDTO
 from backend.app.services.chat_service import answer_chat
 from backend.app.services.multimodal_service import transcribe_audio, extract_text_from_image, describe_image_vision
@@ -10,6 +11,10 @@ from backend.app.services.multimodal_service import transcribe_audio, extract_te
 router = APIRouter(tags=["chat"])
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "../../data/uploads")
+
+
+def local_multimodal_disabled() -> bool:
+    return settings.ai_disabled
 
 @router.post("/chat", response_model=ChatResponseDTO)
 async def chat_endpoint(request: ChatRequestDTO) -> ChatResponseDTO:
@@ -23,6 +28,12 @@ async def chat_audio_endpoint(
     language: Annotated[str | None, Form()] = None,
 ) -> ChatResponseDTO:
     """Transcribes an audio message and processes it through the chat pipeline."""
+    if local_multimodal_disabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Multimodal input is unavailable when local AI models are disabled. Send a text message instead.",
+        )
+
     content_type = file.content_type or ""
     if not content_type.startswith("audio/"):
         raise HTTPException(status_code=400, detail="Unsupported file type. Please upload an audio file.")
@@ -74,6 +85,12 @@ async def chat_multimodal_endpoint(
     language: Annotated[str | None, Form()] = None,
 ) -> ChatResponseDTO:
     """Handles audio or image files, converts them to text, and processes them through the RAG pipeline."""
+    if local_multimodal_disabled():
+        raise HTTPException(
+            status_code=503,
+            detail="Multimodal input is unavailable when local AI models are disabled. Send a text message instead.",
+        )
+
     content_type = file.content_type or ""
     user_message = (message or "").strip()
     extracted_text = ""

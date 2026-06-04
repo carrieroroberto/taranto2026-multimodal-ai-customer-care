@@ -97,8 +97,6 @@ services:
     depends_on:
       vector-db:
         condition: service_started
-      llm:
-        condition: service_started
       database:
         condition: service_healthy
     ports:

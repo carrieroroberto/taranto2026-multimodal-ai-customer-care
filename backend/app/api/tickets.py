@@ -16,7 +16,7 @@ EMAIL_REGEX = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
 
 
 @router.post("/tickets", status_code=status.HTTP_201_CREATED)
-def post_ticket(ticket: TicketRequestDTO):
+async def post_ticket(ticket: TicketRequestDTO):
     logger.info("RECEIVED TICKET REQUEST: %s", ticket.model_dump_json())
     
     # Validate email
@@ -28,18 +28,16 @@ def post_ticket(ticket: TicketRequestDTO):
     ensure_conversation(conversation_id=ticket.conversation_id)
 
     # Generate triage
-    triage = generate_ticket_triage(ticket.conversation_id)
+    triage = await generate_ticket_triage(ticket.conversation_id)
     
     # Combine data
     ticket_data = {
         "conversation_id": ticket.conversation_id,
+        "feedback_message_id": ticket.feedback_message_id,
         "user_email": ticket.user_email,
         "domain": triage["domain"],
         "priority": triage["priority"],
         "summary": triage["summary"],
-        "ai_summary": triage["ai_summary"],
-        "original_message": triage["original_message"],
-        "translated_message": triage["translated_message"],
     }
     
     logger.info("SAVING TICKET TO DATABASE: %s", ticket_data)
@@ -63,10 +61,10 @@ def ticket_success_message(language: str | None, email: str) -> str:
         case "en":
             return f"Request sent successfully. The operator will reply to {email}."
         case "es":
-            return f"Solicitud enviada correctamente. El operador respondera a {email}."
+            return f"Solicitud enviada correctamente. El operador responder\u00e1 a {email}."
         case "fr":
-            return f"Demande envoyee avec succes. L'operateur repondra a {email}."
+            return f"Demande envoy\u00e9e avec succ\u00e8s. L'op\u00e9rateur r\u00e9pondra \u00e0 {email}."
         case "ar":
             return f"\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628 \u0628\u0646\u062c\u0627\u062d. \u0633\u064a\u0631\u062f \u0627\u0644\u0645\u0648\u0638\u0641 \u0639\u0644\u0649 {email}."
         case _:
-            return f"Richiesta inviata con successo. L'operatore rispondera a {email}."
+            return f"Richiesta inviata con successo. L'operatore risponder\u00e0 a {email}."

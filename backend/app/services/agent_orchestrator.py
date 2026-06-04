@@ -12,7 +12,8 @@ from backend.app.services.llm_service import (
     human_operator_answer,
     unavailable_answer,
     is_refusal_answer,
-    normalize_text
+    normalize_text,
+    translate_text,
 )
 from backend.app.services.rag_service import (
     retrieve_context,
@@ -54,24 +55,26 @@ async def planning_node(state: AgentState) -> Dict[str, Any]:
     history = state["history"]
     visual_context = state.get("visual_context")
     
+    plan = await build_query_plan(message, history, state["language"])
+
     if explicit_operator_requested(message):
         return {
+            "plan": plan,
             "should_escalate": True,
             "escalation_reason": "human_operator_requested",
-            "answer": human_operator_answer(state["language"])
+            "answer": human_operator_answer(plan.response_language)
         }
-    
-    plan = await build_query_plan(message, history)
     
     if visual_context:
         from backend.app.services.rag_service import PlannedRetrievalQuery
         import dataclasses
-        anchored_query = f"{visual_context} Giochi del Mediterraneo Taranto 2026 mascotte logo emblema"
+        visual_context_it = await translate_text(visual_context, "it")
+        anchored_query = f"{visual_context_it} Giochi del Mediterraneo Taranto 2026 mascotte logo emblema"
         new_queries = list(plan.retrieval_queries)
         new_queries.append(PlannedRetrievalQuery(query=anchored_query, domain="general", weight=1.5))
-        new_queries.append(PlannedRetrievalQuery(query=visual_context, domain="general", weight=1.0))
+        new_queries.append(PlannedRetrievalQuery(query=visual_context_it, domain="general", weight=1.0))
         new_expanded = list(plan.expanded_queries)
-        new_expanded.extend([visual_context, anchored_query])
+        new_expanded.extend([visual_context_it, anchored_query])
         plan = dataclasses.replace(plan, retrieval_queries=new_queries, expanded_queries=new_expanded)
 
     return {"plan": plan}
@@ -99,8 +102,9 @@ async def generation_node(state: AgentState) -> Dict[str, Any]:
     should_escalate = False
     reason = None
     if not contexts:
+        response_language = plan.response_language if plan else state["language"]
         return {
-            "answer": unavailable_answer(state["language"]),
+            "answer": unavailable_answer(response_language),
             "should_escalate": True,
             "escalation_reason": "no_context"
         }

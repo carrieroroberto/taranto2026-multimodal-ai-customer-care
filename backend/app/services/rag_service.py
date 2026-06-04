@@ -698,11 +698,11 @@ def google_maps_url(latitude: float, longitude: float) -> str:
 
 def parse_retrieval_queries(
     queries: list[dict[str, Any]] | None,
-    original_message: str,
+    fallback_query: str,
     default_domains: list[str],
 ) -> list[PlannedRetrievalQuery]:
     if not queries:
-        return [PlannedRetrievalQuery(query=original_message, domain=default_domains[0])]
+        return [PlannedRetrievalQuery(query=fallback_query, domain=default_domains[0])]
 
     result: list[PlannedRetrievalQuery] = []
     for q in queries:
@@ -710,14 +710,11 @@ def parse_retrieval_queries(
         if not text:
             continue
         domain = q.get("domain")
+        if isinstance(domain, str):
+            domain = domain.strip() or None
+            if domain.lower() == "null":
+                domain = None
         weight = float(q.get("weight") or 1.0)
         result.append(PlannedRetrievalQuery(query=text, domain=domain, weight=weight))
     
-    return result or [PlannedRetrievalQuery(query=original_message, domain=default_domains[0])]
-
-
-def translate_static_answer(text: str, target_lang: str) -> str:
-    # This is a stub for a real translation service or predefined translations
-    # For now, we just return the text as is if it's already in the target language
-    # or if it's a demo. In a real app, this would use a translation API.
-    return text
+    return result or [PlannedRetrievalQuery(query=fallback_query, domain=default_domains[0])]

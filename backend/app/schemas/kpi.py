@@ -8,7 +8,6 @@ class KpiSummaryDTO(BaseModel):
     bot_messages: int
     total_tickets: int
     open_tickets: int
-    in_progress_tickets: int
     closed_tickets: int
     positive_feedback: int
     negative_feedback: int
