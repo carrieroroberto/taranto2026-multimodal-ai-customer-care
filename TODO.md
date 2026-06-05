@@ -25,10 +25,10 @@ DONE:
 
 - voglio che anche messaggi precedenti possano aprire escalation anche se non sono ultimo messaggio inviato. semplicemente invece di avere feedbakc_message_id nella tabella tickets viene salvato escalated_message_id ovvero id della tabella messages relativo al messaggio su cui è stato richiesto il feedback. unico vincolo mentre è aperta una richiesta di escalation non posso premere altri feedback negativi e duplicarle escalation, uno per volta ma anche in maniera retroattiva.
 
-
-TO DO:
 - fai in modo che un utente possa togliere il feedback schiacciando nuovamente su di esso, in modo che non per forza poi è obbligato a switchare tra i due, ma potendolo anche rimuoverlo se non è interessato a fornirne uno o lo fornisce per sbaglio e vuole toglierlo.
 
+
+TO DO:
 - text to speech lato frontend su tutti i dispositivi quando l'utente invia un messaggio vocale la risposta, oltre a essere visualizzata in maniera testuale come ogni messaggio deve essere anche letta in automatico (appena il messaggio viene visualizzato), nella stessa lingua del messaggio (o se non disponibile nella lingua impostata nella UI), una sola volta quando la risposta viene ricevuta dal bot e compare nella chat (non anche nei refresh o nelle aperture successive della sessione).
 
 - quando passo da arabo a un altra lingua poi non viene mantenuto il distacco dai pulsanti floating all'ultimo messaggio come invece avviene passando da una lingua all'altra (non arabo). solo su mobile. quindi voglio che mi riporti a ogni switch di lingua quanto piu giu possibile nella message area, nello stesso modo che succede quando appare un nuovo messaggio nella chat.

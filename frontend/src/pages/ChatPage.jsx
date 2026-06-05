@@ -17,7 +17,6 @@ import {
 import {
   fetchConversationMessages,
   sendChatMessage,
-  sendFeedback,
   sendMultimodalMessage,
   sendTicket,
   startConversation,
@@ -45,6 +44,7 @@ export function ChatPage() {
   const [isSendingTicket, setIsSendingTicket] = useState(false);
   const [theme, setTheme] = useState(() => getInitialTheme());
   const [locale, setLocale] = useState(() => getInitialLocale());
+  const [composerResetSignal, setComposerResetSignal] = useState(0);
   const sessionIdRef = useRef(getOrCreateSessionId());
   const messageListRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -463,16 +463,21 @@ export function ChatPage() {
   }
 
   async function handleFeedback(message, satisfied) {
-    const mId = message.persistedId || message.id;
+    const messageId = message.persistedId || message.id;
+    const activeEscalationFlowId = findActiveEscalationFlowId(messages);
+    const isActiveEscalationTarget =
+      isEscalating && activeEscalationFlowId === message.id;
+    const nextSatisfaction =
+      message.satisfaction === satisfied ? null : satisfied;
     if (
-      !mId ||
+      !messageId ||
       message.isLoading ||
       message.isError ||
       isSending ||
       isSendingTicket ||
-      isEscalating ||
+      (isEscalating && !isActiveEscalationTarget) ||
       message.feedbackLocked ||
-      message.satisfaction === satisfied
+      message.satisfaction === nextSatisfaction
     ) {
       return;
     }
@@ -481,13 +486,16 @@ export function ChatPage() {
     setShouldScroll(false);
 
     const previousSatisfaction = message.satisfaction;
-    patchMessage(message.id, { satisfaction: satisfied });
+    patchMessage(message.id, { satisfaction: nextSatisfaction });
 
     try {
-      await sendFeedback({ sessionId: sessionIdRef.current, messageId: mId, satisfied });
+      await updateMessageFeedback({
+        messageId,
+        satisfaction: nextSatisfaction,
+      });
       
       // ESCALATION SU FEEDBACK NEGATIVO - Solo se è l'ultimo messaggio bot
-      if (satisfied === false) {
+      if (nextSatisfaction === false) {
         setIsEscalating(true);
         const apologyText =
           t.feedbackSupportPrompt ||
@@ -500,11 +508,13 @@ export function ChatPage() {
         setMessages(prev => [...prev, apologyMsg]);
         // Se scatta l'escalation, allora torniamo a scrollare verso il basso
         setShouldScroll(true);
-      } else if (previousSatisfaction === false && satisfied === true) {
+      } else if (previousSatisfaction === false) {
         // Se l'utente cambia da pollice giù a pollice su, chiudi l'escalation se era legata a questo messaggio
         // Ma NON chiudere se l'escalation è stata innescata da un altro motivo (es. richiesta esplicita)
         if (messages.find(m => m.feedbackSupportFor === message.id)) {
            setIsEscalating(false);
+           setShouldScroll(true);
+           setComposerResetSignal((value) => value + 1);
            setMessages(prev =>
              prev.filter(existingMessage => !isEscalationFlowMessage(existingMessage, message.id)),
            );
@@ -551,6 +561,7 @@ export function ChatPage() {
     }
   }
 
+  const activeEscalationFlowId = findActiveEscalationFlowId(messages);
   const messageInteractionsDisabled = isSending || isSendingTicket || isEscalating;
 
   return (
@@ -571,6 +582,10 @@ export function ChatPage() {
             <MessageList
               feedbackCanCorrectNegative={true}
               feedbackDisabled={messageInteractionsDisabled}
+              activeEscalationFlowId={activeEscalationFlowId}
+              allowActiveEscalationFeedback={
+                isEscalating && !isSending && !isSendingTicket
+              }
               isSending={messageInteractionsDisabled}
               messages={messages}
               listRef={messageListRef}
@@ -607,6 +622,7 @@ export function ChatPage() {
               onStop={handleStop}
               isEscalating={isEscalating}
               onCancelEscalation={handleCancelEscalation}
+              resetDraftSignal={composerResetSignal}
             />
           </section>
         </div>

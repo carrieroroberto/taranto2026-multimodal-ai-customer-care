@@ -8,6 +8,8 @@ const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
 export function MessageList({
   feedbackCanCorrectNegative = false,
   feedbackDisabled = false,
+  activeEscalationFlowId = null,
+  allowActiveEscalationFeedback = false,
   isSending,
   messages,
   listRef,
@@ -38,6 +40,8 @@ export function MessageList({
                 onContentLoad={onContentLoad}
                 feedbackCanCorrectNegative={feedbackCanCorrectNegative}
                 feedbackDisabled={feedbackDisabled}
+                activeEscalationFlowId={activeEscalationFlowId}
+                allowActiveEscalationFeedback={allowActiveEscalationFeedback}
                 onFeedback={onFeedback}
                 onSuggestionClick={onSuggestionClick}
                 showSuggestions={!isSending}
@@ -64,6 +68,8 @@ function ChatMessage({
   onContentLoad,
   feedbackCanCorrectNegative,
   feedbackDisabled,
+  activeEscalationFlowId,
+  allowActiveEscalationFeedback,
   onFeedback,
   onSuggestionClick,
   showSuggestions,
@@ -153,10 +159,12 @@ function ChatMessage({
               onSuggestionClick={onSuggestionClick}
             />
           ) : null}
-          <MessageFeedback
-            disabled={feedbackDisabled}
-            message={message}
-            t={t}
+        <MessageFeedback
+          disabled={feedbackDisabled}
+          activeEscalationFlowId={activeEscalationFlowId}
+          allowActiveEscalationFeedback={allowActiveEscalationFeedback}
+          message={message}
+          t={t}
             onFeedback={onFeedback}
           />
         </div>
@@ -174,7 +182,14 @@ function MessageTimestamp({ timestamp }) {
   return <span className="message-timestamp">{label}</span>;
 }
 
-function MessageFeedback({ disabled, message, t, onFeedback }) {
+function MessageFeedback({
+  disabled,
+  activeEscalationFlowId,
+  allowActiveEscalationFeedback,
+  message,
+  t,
+  onFeedback,
+}) {
   const canShow =
     message.role === "assistant" &&
     !message.translationKey &&
@@ -188,7 +203,11 @@ function MessageFeedback({ disabled, message, t, onFeedback }) {
   }
 
   // Se 'disabled' è true, aggiungiamo la classe 'is-disabled' che grigisce tutto
-  const isDisabled = disabled || message.feedbackLocked;
+  const canEditActiveEscalation =
+    allowActiveEscalationFeedback &&
+    activeEscalationFlowId === message.id &&
+    message.satisfaction === false;
+  const isDisabled = (disabled && !canEditActiveEscalation) || message.feedbackLocked;
   const containerClassName = isDisabled ? "message-feedback is-disabled" : "message-feedback";
 
   return (

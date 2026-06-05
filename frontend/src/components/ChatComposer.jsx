@@ -10,6 +10,7 @@ export function ChatComposer({
   onStop,
   isEscalating,
   onCancelEscalation,
+  resetDraftSignal = 0,
 }) {
   const [message, setMessage] = useState("");
   const [selectedImage, setSelectedImage] = useState(null);
@@ -48,6 +49,10 @@ export function ChatComposer({
   useEffect(() => {
     autosize();
   }, [message]);
+
+  useEffect(() => {
+    setMessage("");
+  }, [resetDraftSignal]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 767px)");
