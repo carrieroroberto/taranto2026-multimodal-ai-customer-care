@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL CHECK (role IN ('user', 'bot')),
     type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio')),
     content TEXT NOT NULL,
-    sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+    media_url TEXT DEFAULT NULL,
+    sources JSONB DEFAULT NULL,
     satisfaction BOOLEAN DEFAULT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -32,8 +33,7 @@ CREATE TABLE IF NOT EXISTS tickets (
     domain TEXT DEFAULT 'informazioni generali',
     user_email TEXT NOT NULL,
     summary TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_tickets_escalated_message_id ON tickets(escalated_message_id);

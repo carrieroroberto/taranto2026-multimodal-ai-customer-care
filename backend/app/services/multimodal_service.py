@@ -6,6 +6,7 @@ import pytesseract
 import base64
 import json
 import re
+import httpx
 from io import BytesIO
 from PIL import Image, ImageOps, ImageFilter
 from fastapi import UploadFile
@@ -34,7 +35,56 @@ def get_whisper_model():
     return _whisper_model
 
 async def transcribe_audio(file: UploadFile) -> str:
-    """Transcribes an audio file using OpenAI Whisper, forced to Italian."""
+    """Transcribes an audio file using the configured multimodal provider."""
+    provider = normalized_multimodal_provider()
+    if provider in {"groq", "auto"} and groq_api_key():
+        text = await transcribe_audio_groq(file)
+        if text or provider == "groq":
+            return text
+
+    if provider == "groq":
+        return ""
+
+    return await transcribe_audio_local(file)
+
+
+async def transcribe_audio_groq(file: UploadFile) -> str:
+    await file.seek(0)
+    content = await file.read()
+    await file.seek(0)
+
+    if len(content) < 100:
+        return ""
+
+    filename = file.filename or f"audio{_get_upload_suffix(file)}"
+    content_type = file.content_type or "application/octet-stream"
+    data = {
+        "model": settings.groq_transcription_model,
+        "response_format": "json",
+    }
+    files = {"file": (filename, content, content_type)}
+    headers = {"Authorization": f"Bearer {groq_api_key()}"}
+
+    try:
+        logger.info("Transcribing audio with Groq model: %s", settings.groq_transcription_model)
+        async with httpx.AsyncClient(timeout=max(settings.llm_timeout_seconds, 60)) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers=headers,
+                data=data,
+                files=files,
+            )
+            response.raise_for_status()
+        text = response.json().get("text", "").strip()
+        logger.info("Groq transcription complete: %s", text)
+        return text
+    except Exception as exc:
+        logger.error("Groq transcription error: %s", exc)
+        return ""
+
+
+async def transcribe_audio_local(file: UploadFile) -> str:
+    """Transcribes an audio file using local Whisper."""
     model = get_whisper_model()
     
     with tempfile.NamedTemporaryFile(delete=False, suffix=_get_upload_suffix(file)) as tmp:
@@ -48,12 +98,9 @@ async def transcribe_audio(file: UploadFile) -> str:
         tmp_path = tmp.name
 
     try:
-        logger.info(f"Transcribing audio file: {file.filename}")
-        # Force Italian language and use temperature 0 for better stability
-        # Use initial_prompt to guide Whisper with specialized terminology
+        logger.info(f"Transcribing audio file locally: {file.filename}")
         result = model.transcribe(
             tmp_path, 
-            language="it", 
             task="transcribe", 
             temperature=0,
             initial_prompt="Giochi del Mediterraneo Taranto 2026, Ionios, mascotte, sport, sedi, trasporti, biglietti."
@@ -122,10 +169,9 @@ async def extract_text_from_image(file: UploadFile) -> str:
         return ""
 
 async def describe_image_vision(file: UploadFile) -> str:
-    """Describes an image using the Moondream vision model in Ollama."""
+    """Describes an image using the configured vision provider."""
     try:
-        logger.info(f"Analyzing image visually with moondream: {file.filename}")
-        
+        logger.info(f"Analyzing image visually: {file.filename}")
         await file.seek(0)
         content = await file.read()
         await file.seek(0)
@@ -134,24 +180,88 @@ async def describe_image_vision(file: UploadFile) -> str:
             logger.error("Empty image content received")
             return ""
 
-        try:
-            img = Image.open(BytesIO(content))
-            img.thumbnail((768, 768))
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            
-            buffered = BytesIO()
-            img.save(buffered, format="JPEG", quality=85)
-            optimized_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        except Exception as e:
-            logger.error(f"PIL error during vision processing: {e}")
+        optimized_base64 = image_content_to_jpeg_base64(content)
+        if not optimized_base64:
             return ""
 
+        provider = normalized_multimodal_provider()
+        if provider in {"groq", "auto"} and groq_api_key():
+            description = await describe_image_groq(optimized_base64)
+            if description or provider == "groq":
+                return description
+
+        if provider == "groq":
+            return ""
+
+        return await describe_image_ollama(optimized_base64)
+    except Exception as e:
+        logger.error(f"Vision error detail: {str(e)}")
+        return ""
+
+
+async def describe_image_groq(optimized_base64: str) -> str:
+    data = {
+        "model": settings.groq_vision_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Describe briefly what is visible in this image. "
+                            "If you see a mascot, a torch, sport symbols, a venue, a ticket, "
+                            "a calendar, or text related to Taranto 2026, mention it explicitly. "
+                            "Do not invent names, dates, prices or links."
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{optimized_base64}"
+                        },
+                    },
+                ],
+            }
+        ],
+        "temperature": 0,
+        "max_tokens": 220,
+    }
+    headers = {
+        "Authorization": f"Bearer {groq_api_key()}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        logger.info("Analyzing image with Groq vision model: %s", settings.groq_vision_model)
+        async with httpx.AsyncClient(timeout=max(settings.llm_timeout_seconds, 60)) as client:
+            response = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers=headers,
+                json=data,
+            )
+            response.raise_for_status()
+        result = response.json()
+        description = (
+            result.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            .strip()
+        )
+        logger.info("Groq vision analysis complete: %s", description)
+        return description
+    except Exception as exc:
+        logger.error("Groq vision error: %s", exc)
+        return ""
+
+
+async def describe_image_ollama(optimized_base64: str) -> str:
+    try:
         ollama_url = settings.ollama_base_url.rstrip("/") + "/api/generate"
         logger.info(f"Sending vision request to: {ollama_url}")
         
         data = {
-            "model": "moondream",
+            "model": settings.vision_model,
             "prompt": "What do you see in this image? Describe it briefly. If you see a mascot, a torch, or three interlocking rings, mention them explicitly.",
             "images": [optimized_base64],
             "stream": False
@@ -168,3 +278,27 @@ async def describe_image_vision(file: UploadFile) -> str:
     except Exception as e:
         logger.error(f"Vision error detail: {str(e)}")
         return ""
+
+
+def image_content_to_jpeg_base64(content: bytes) -> str:
+    try:
+        img = Image.open(BytesIO(content))
+        img.thumbnail((768, 768))
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        buffered = BytesIO()
+        img.save(buffered, format="JPEG", quality=85)
+        return base64.b64encode(buffered.getvalue()).decode('utf-8')
+    except Exception as e:
+        logger.error(f"PIL error during vision processing: {e}")
+        return ""
+
+
+def groq_api_key() -> str:
+    return (settings.groq_api_key or "").strip().strip('"').strip("'")
+
+
+def normalized_multimodal_provider() -> str:
+    provider = (settings.multimodal_provider or "auto").strip().lower()
+    return provider if provider in {"auto", "groq", "local"} else "auto"

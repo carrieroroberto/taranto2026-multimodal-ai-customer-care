@@ -23,6 +23,8 @@ import {
   updateMessageFeedback,
 } from "../services/chatApi.js";
 import { getOrCreateSessionId } from "../utils/session.js";
+import { stopAudioPlayback } from "../utils/audioPlayback.js";
+import { isSupportedSpeechLanguage, speakTextOnce } from "../utils/textToSpeech.js";
 
 const initialMessages = [
   {
@@ -208,6 +210,7 @@ export function ChatPage() {
 
   async function handleSend(message) {
     if (!message || isSending || isSendingTicket) return;
+    stopAudioPlayback();
     setShouldScroll(true);
     const requestLocale = locale;
 
@@ -364,6 +367,7 @@ export function ChatPage() {
 
   async function handleFileSend(file, message = "", metadata = {}) {
     if (!file || isSending) return;
+    stopAudioPlayback();
 
     const isImage = file.type.startsWith("image/");
     const trimmedMessage = message.trim();
@@ -400,6 +404,10 @@ export function ChatPage() {
         language: requestLocale,
         signal: controller.signal
       });
+      const answerText = response.answer || t.unavailableAnswer;
+      const responseLanguage = isSupportedSpeechLanguage(response.language)
+        ? response.language
+        : requestLocale;
 
       patchMessage(pendingMessage.id, {
         persistedId: response.bot_message_id || null,
@@ -407,7 +415,7 @@ export function ChatPage() {
         createdAt: response.bot_created_at || pendingMessage.createdAt,
         feedbackDisabled: Boolean(response.should_escalate || response.needs_email_for_ticket),
         escalationFlowFor: response.needs_email_for_ticket ? pendingMessage.id : null,
-        text: response.answer || t.unavailableAnswer,
+        text: answerText,
         sources: normalizeSources(response.sources),
         isLoading: false,
       });
@@ -423,6 +431,10 @@ export function ChatPage() {
 
       if (response.needs_email_for_ticket) {
         setIsEscalating(true);
+      }
+
+      if (!isImage) {
+        speakTextOnce(answerText, responseLanguage);
       }
     } catch (error) {
       if (error.name === "AbortError") {
@@ -616,6 +628,7 @@ export function ChatPage() {
 
             <ChatComposer
               isSending={isSending || isSendingTicket}
+              locale={locale}
               t={t}
               onSend={handleSend}
               onFileSend={handleFileSend}
@@ -675,10 +688,13 @@ function mapPersistedMessage(m) {
   
   // Se è un'immagine ricaricata dal DB, estraiamo l'URL se presente e puliamo il testo
   if (m.type === "image") {
+    image = normalizePersistedMediaUrl(m.media_url);
     // Estrai l'URL dell'immagine se è stato salvato
     const urlMatch = text.match(/\[IMAGE_URL:(.*?)\]/);
-    if (urlMatch) {
+    if (!image && urlMatch) {
       image = urlMatch[1];
+    }
+    if (urlMatch) {
       // Rimuovi il tag URL dal testo testuale
       text = text.replace(urlMatch[0], "").trim();
     }
@@ -693,9 +709,15 @@ function mapPersistedMessage(m) {
       text = "📸 [Immagine inviata]";
     }
   } else if (m.type === "audio") {
+    const persistedAudioUrl = normalizePersistedMediaUrl(m.media_url);
+    if (persistedAudioUrl) {
+      audio = { url: persistedAudioUrl };
+    }
     const urlMatch = text.match(/\[AUDIO_URL:(.*?)\]/);
-    if (urlMatch) {
+    if (!audio && urlMatch) {
       audio = { url: urlMatch[1] };
+    }
+    if (urlMatch) {
       text = text.replace(urlMatch[0], "").trim();
     }
     text = "";
@@ -721,6 +743,11 @@ function mapPersistedMessage(m) {
     isLoading: false,
     isError: false,
   };
+}
+
+function normalizePersistedMediaUrl(value) {
+  const url = String(value || "").trim();
+  return url || null;
 }
 
 function stripHiddenMultimodalText(value) {

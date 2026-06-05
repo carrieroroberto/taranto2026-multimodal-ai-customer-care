@@ -13,6 +13,7 @@ Il progetto è una web app full-stack containerizzata con Docker Compose.
 - ChromaDB come vector database.
 - Postgres per conversazioni, messaggi, ticket e KPI.
 - Ollama come servizio LLM locale.
+- Groq API supportata per usare LLM e multimodale senza GPU locale.
 - Modello LLM configurato di default: `qwen3:8b`.
 - Modello embedding configurato di default: `BAAI/bge-m3`.
 - Tunnel HTTPS temporaneo con Cloudflare per test da iPhone, PWA e microfono.
@@ -71,7 +72,7 @@ Servizi Docker principali:
 | `database` | Postgres sulla porta host `5433` |
 | `pgadmin` | UI grafica per Postgres sulla porta `5050` |
 | `llm` | Ollama per modelli locali |
-| `llm-init` | Pull automatico del modello LLM configurato |
+| `llm-init` | Pull automatico dei modelli locali configurati |
 | `cloudflared` | Tunnel HTTPS temporaneo `trycloudflare.com` |
 
 ## Struttura Del Repository
@@ -149,7 +150,14 @@ Variabili principali:
 | `OLLAMA_MODEL` | Modello usato dal backend |
 | `QUERY_PARSER_MODEL` | Modello usato dal query planner |
 | `USE_LLM_QUERY_PARSER` | Abilita il planner LLM |
-| `AI_DISABLED` | Disattiva i modelli AI locali. Se `GROQ_API_KEY` e' configurata usa Groq testuale; altrimenti usa una risposta demo salvando comunque conversazioni e messaggi |
+| `AI_DISABLED` | Disattiva i modelli AI. Per usare Groq/API con RAG e multimodale deve restare `false` |
+| `GROQ_API_KEY` | Chiave Groq per query planner, generazione testuale, trascrizione e vision via API |
+| `GROQ_MODEL` | Modello Groq testuale |
+| `GROQ_VISION_MODEL` | Modello Groq usato per descrivere immagini |
+| `GROQ_TRANSCRIPTION_MODEL` | Modello Groq usato per trascrivere audio |
+| `LLM_FALLBACK_TIMEOUT_SECONDS` | `0` forza Groq diretto; un valore maggiore prova prima Ollama e poi Groq |
+| `MULTIMODAL_PROVIDER` | `groq`, `local` o `auto` per audio/vision |
+| `VISION_MODEL` | Modello vision locale Ollama, di default `moondream` |
 | `VITE_API_BASE_URL` | Base API del frontend, di default `/api` |
 | `VITE_PROXY_TARGET` | Target proxy Vite verso il backend |
 
@@ -165,13 +173,19 @@ Su Windows si puo' usare lo script rapido:
 run.bat
 ```
 
-Di default equivale a:
+Di default equivale alla modalita' completa:
+
+```bat
+run.bat full
+```
+
+Per usare Groq API per testo e multimodalita', senza Ollama locale:
 
 ```bat
 run.bat lite
 ```
 
-La modalita' `lite` avvia frontend, backend, Postgres, pgAdmin, ChromaDB e tunnel Cloudflare, ma non avvia i servizi AI locali `llm` e `llm-init`. Con `GROQ_API_KEY` configurata usa Groq per la generazione testuale; senza chiave Groq salva comunque conversazioni e messaggi nel database e risponde con fallback demo.
+La modalita' `lite` avvia frontend, backend, Postgres, pgAdmin, ChromaDB e tunnel Cloudflare, ma non avvia `llm` e `llm-init`. Imposta `AI_DISABLED=false`, `MULTIMODAL_PROVIDER=groq` e `LLM_FALLBACK_TIMEOUT_SECONDS=0`, quindi usa Groq per query planner, risposta finale, trascrizione audio e vision immagini quando `GROQ_API_KEY` e' configurata.
 
 Per la versione completa con modelli AI locali:
 
@@ -179,7 +193,9 @@ Per la versione completa con modelli AI locali:
 run.bat full
 ```
 
-La modalita' `full` avvia anche Ollama, verifica/scarica il modello configurato e abilita la pipeline RAG completa con modelli locali e multimodalita'. Groq resta fallback in base a `LLM_FALLBACK_TIMEOUT_SECONDS`.
+La modalita' `full` avvia anche Ollama con accelerazione NVIDIA dal compose principale, verifica/scarica il modello testuale e il modello vision configurati e usa i modelli locali come percorso principale. Groq resta solo fallback del testo in base a `LLM_FALLBACK_TIMEOUT_SECONDS`, impostato dallo script a `40` secondi.
+
+Il progetto mantiene un solo `docker-compose.yml`. In `lite` il servizio `llm` non viene avviato, quindi il requisito GPU non viene coinvolto.
 
 Dalla root del progetto:
 

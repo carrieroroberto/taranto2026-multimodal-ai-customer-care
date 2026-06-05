@@ -4,11 +4,16 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
 set "MODE=%~1"
-if "%MODE%"=="" set "MODE=lite"
+if "%MODE%"=="" set "MODE=full"
 
 if /I "%MODE%"=="lite" goto VALID_MODE
 if /I "%MODE%"=="full" goto VALID_MODE
 
+echo Uso: run.bat [lite^|full]
+echo.
+echo   lite  = Groq API per testo e multimodalita, senza Ollama locale
+echo   full  = modelli locali con Ollama GPU, Groq solo fallback da timeout
+echo.
 pause
 exit /b 1
 
@@ -17,15 +22,20 @@ set "MAX_LINK_WAIT_SECONDS=120"
 set "START_LOG=%TEMP%\tarai_compose_start_%RANDOM%.log"
 set "CF_LOG=%TEMP%\tarai_cloudflare_logs_%RANDOM%.log"
 set "CF_LINK="
+set "COMPOSE_CMD=docker compose"
 
 echo Mode: %MODE%
 echo.
 
 if /I "%MODE%"=="full" (
     set "AI_DISABLED=false"
+    set "MULTIMODAL_PROVIDER=local"
+    set "LLM_FALLBACK_TIMEOUT_SECONDS=40"
     call :START_FULL
 ) else (
-    set "AI_DISABLED=true"
+    set "AI_DISABLED=false"
+    set "MULTIMODAL_PROVIDER=groq"
+    set "LLM_FALLBACK_TIMEOUT_SECONDS=0"
     call :START_LITE
 )
 
@@ -39,31 +49,34 @@ exit /b 0
 
 :START_LITE
 
-docker compose stop llm llm-init >nul 2>&1
+%COMPOSE_CMD% stop llm llm-init >nul 2>&1
 
-docker compose up -d --build --force-recreate --no-deps database pgadmin vector-db > "%START_LOG%" 2>&1
+%COMPOSE_CMD% up -d --build --force-recreate --no-deps database pgadmin vector-db > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
 call :WAIT_HEALTH tarai-database 120
 if errorlevel 1 goto START_ERROR
 
-docker compose up -d --build --force-recreate --no-deps backend frontend cloudflared > "%START_LOG%" 2>&1
+%COMPOSE_CMD% up -d --build --force-recreate --no-deps backend frontend cloudflared > "%START_LOG%" 2>&1
+if errorlevel 1 goto START_ERROR
+
+call :WAIT_HEALTH tarai-backend 180
 if errorlevel 1 goto START_ERROR
 
 exit /b 0
 
 :START_FULL
 
-docker compose up -d --build --force-recreate database pgadmin vector-db llm > "%START_LOG%" 2>&1
+%COMPOSE_CMD% up -d --build --force-recreate database pgadmin vector-db llm > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
 call :WAIT_HEALTH tarai-database 120
 if errorlevel 1 goto START_ERROR
 
-docker compose up --build --force-recreate llm-init
+%COMPOSE_CMD% up --build --force-recreate llm-init
 if errorlevel 1 goto START_ERROR
 
-docker compose up -d --build --force-recreate backend frontend cloudflared > "%START_LOG%" 2>&1
+%COMPOSE_CMD% up -d --build --force-recreate backend frontend cloudflared > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
 exit /b 0
@@ -108,13 +121,13 @@ goto WAIT_HEALTH_LOOP
 :FETCH_CLOUDFLARE_LINK
 for /f "delims=" %%T in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')"') do set "SINCE_UTC=%%T"
 
-docker compose restart cloudflared > "%START_LOG%" 2>&1
+%COMPOSE_CMD% restart cloudflared > "%START_LOG%" 2>&1
 if errorlevel 1 (
     exit /b 1
 )
 
 set "CF_CONTAINER="
-for /f "delims=" %%C in ('docker compose ps -q cloudflared') do set "CF_CONTAINER=%%C"
+for /f "delims=" %%C in ('%COMPOSE_CMD% ps -q cloudflared') do set "CF_CONTAINER=%%C"
 
 if not defined CF_CONTAINER (
     exit /b 1

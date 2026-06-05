@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { chatBotUrl, chatUserUrl } from "../assets/index.js";
 import { ImageLightbox } from "./ImageLightbox.jsx";
+import { STOP_AUDIO_PLAYBACK_EVENT, stopAudioPlayback } from "../utils/audioPlayback.js";
 
 const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
 
@@ -427,6 +428,23 @@ function AudioWaveform({ audio, label }) {
     setIsPlaying(false);
   }, [audio?.durationMs, audioUrl]);
 
+  useEffect(() => {
+    function handleStopAudioPlayback() {
+      const audioElement = audioRef.current;
+      if (!audioElement) {
+        return;
+      }
+
+      audioElement.pause();
+      setIsPlaying(false);
+    }
+
+    window.addEventListener(STOP_AUDIO_PLAYBACK_EVENT, handleStopAudioPlayback);
+    return () => {
+      window.removeEventListener(STOP_AUDIO_PLAYBACK_EVENT, handleStopAudioPlayback);
+    };
+  }, []);
+
   async function handleTogglePlayback() {
     const audioElement = audioRef.current;
     if (!audioElement) {
@@ -440,6 +458,7 @@ function AudioWaveform({ audio, label }) {
     }
 
     try {
+      stopAudioPlayback();
       await audioElement.play();
       setIsPlaying(true);
     } catch (_error) {

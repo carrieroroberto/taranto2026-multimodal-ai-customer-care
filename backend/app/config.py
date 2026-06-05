@@ -77,8 +77,18 @@ class Settings:
 
     # Groq Fallback
     groq_api_key: str | None = os.getenv("GROQ_API_KEY")
-    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    groq_model: str = os.getenv("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+    groq_vision_model: str = os.getenv(
+        "GROQ_VISION_MODEL",
+        os.getenv("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct"),
+    )
+    groq_transcription_model: str = os.getenv(
+        "GROQ_TRANSCRIPTION_MODEL",
+        "whisper-large-v3-turbo",
+    )
     llm_fallback_timeout_seconds: int = int(os.getenv("LLM_FALLBACK_TIMEOUT_SECONDS", "40"))
+    multimodal_provider: str = os.getenv("MULTIMODAL_PROVIDER", "auto").lower()
+    vision_model: str = os.getenv("VISION_MODEL", "moondream")
 
 
 settings = Settings()

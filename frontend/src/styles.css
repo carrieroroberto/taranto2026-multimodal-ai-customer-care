@@ -1285,14 +1285,11 @@
     background: rgba(255, 255, 255, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.28);
     color: inherit;
-    transition:
-      background 160ms ease,
-      transform 160ms ease;
+    transition: background 160ms ease;
   }
 
   .audio-play-button:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.3);
-    transform: translateY(-1px);
   }
 
   .audio-play-button:disabled {

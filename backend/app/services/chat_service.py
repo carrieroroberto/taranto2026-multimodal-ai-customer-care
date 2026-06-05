@@ -50,6 +50,7 @@ async def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
         session_id,
         request.stored_user_content or message,
         request.message_type,
+        request.media_url,
     )
     ui_lang = normalize_language_code(request.language) if request.language else "it"
 

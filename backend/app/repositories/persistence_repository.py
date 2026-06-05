@@ -44,6 +44,7 @@ def save_message(
     role: str,
     content: str,
     message_type: str = "text",
+    media_url: str | None = None,
     sources: list[Any] | None = None,
 ) -> dict[str, Any]:
     if role not in {"user", "bot"}:
@@ -64,11 +65,18 @@ def save_message(
             )
             cursor.execute(
                 """
-                INSERT INTO messages (conversation_id, role, type, content, sources, created_at)
-                VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
-                RETURNING id, conversation_id, role, type, content, sources, satisfaction, created_at
+                INSERT INTO messages (conversation_id, role, type, content, media_url, sources, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
+                RETURNING id, conversation_id, role, type, content, media_url, sources, satisfaction, created_at
                 """,
-                (resolved_id, role, message_type, content, Jsonb(normalize_sources_for_storage(sources))),
+                (
+                    resolved_id,
+                    role,
+                    message_type,
+                    content,
+                    normalize_media_url(media_url),
+                    normalize_sources_value(role, sources),
+                ),
             )
             row = cursor.fetchone()
 
@@ -79,8 +87,9 @@ def save_user_message(
     session_id: str,
     content: str,
     message_type: str = "text",
+    media_url: str | None = None,
 ) -> dict[str, Any]:
-    return save_message(session_id, "user", content, message_type)
+    return save_message(session_id, "user", content, message_type, media_url)
 
 
 def save_bot_message(
@@ -88,7 +97,7 @@ def save_bot_message(
     content: str,
     sources: list[Any] | None = None,
 ) -> dict[str, Any]:
-    return save_message(session_id, "bot", content, "text", sources)
+    return save_message(session_id, "bot", content, "text", sources=sources)
 
 
 def save_interaction(session_id: str, interaction: dict[str, Any]) -> None:
@@ -117,6 +126,7 @@ def get_conversation_messages(session_id: str) -> list[dict[str, Any]]:
             m.role,
             m.type,
             m.content,
+            m.media_url,
             m.sources,
             m.satisfaction,
             EXISTS (
@@ -336,9 +346,9 @@ def update_ticket_status(ticket_id: str, status: str) -> dict[str, Any] | None:
             cursor.execute(
                 """
                 UPDATE tickets
-                SET status = %s, updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome'
+                SET status = %s
                 WHERE id = %s
-                RETURNING id, status, updated_at
+                RETURNING id, status
                 """,
                 (normalized_status, resolved_id),
             )
@@ -483,6 +493,17 @@ def normalize_sources_for_storage(sources: list[Any] | None) -> list[dict[str, A
         )
 
     return normalized_sources
+
+
+def normalize_sources_value(role: str, sources: list[Any] | None) -> Jsonb | None:
+    if role == "user":
+        return None
+    return Jsonb(normalize_sources_for_storage(sources))
+
+
+def normalize_media_url(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def optional_source_string(value: Any) -> str | None:

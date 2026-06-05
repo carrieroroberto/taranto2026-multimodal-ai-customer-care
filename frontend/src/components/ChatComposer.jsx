@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ImageLightbox } from "./ImageLightbox.jsx";
+import { stopAudioPlayback } from "../utils/audioPlayback.js";
+import { primeTextToSpeech } from "../utils/textToSpeech.js";
 
 export function ChatComposer({
   isSending,
@@ -10,6 +12,7 @@ export function ChatComposer({
   onStop,
   isEscalating,
   onCancelEscalation,
+  locale = "it",
   resetDraftSignal = 0,
 }) {
   const [message, setMessage] = useState("");
@@ -193,6 +196,7 @@ export function ChatComposer({
 
   function handleSubmit(event) {
     event.preventDefault();
+    stopAudioPlayback();
 
     if (isSending) {
       onStop?.();
@@ -200,6 +204,7 @@ export function ChatComposer({
     }
 
     if (isRecording) {
+      primeTextToSpeech(locale);
       stopRecording(true);
       return;
     }
@@ -247,6 +252,8 @@ export function ChatComposer({
   }
 
   function handleImageClick() {
+    stopAudioPlayback();
+
     if (selectedImage) {
       clearSelectedImage();
       return;
@@ -268,6 +275,7 @@ export function ChatComposer({
       return;
     }
 
+    stopAudioPlayback();
     setIsImagePreviewOpen(false);
     setSelectedImage(file);
   }
@@ -278,12 +286,16 @@ export function ChatComposer({
   }
 
   async function toggleRecording() {
+    stopAudioPlayback();
+
     if (isRecording) {
       stopRecording(false);
     } else {
       if (!canStartRecording) {
         return;
       }
+
+      primeTextToSpeech(locale);
 
       let stream;
       try {

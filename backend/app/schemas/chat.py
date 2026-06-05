@@ -13,6 +13,7 @@ class ChatRequestDTO(BaseModel):
     language: str | None = None
     message_type: Literal["text", "image", "audio"] = "text"
     stored_user_content: str | None = None
+    media_url: str | None = None
 
 
 class SourceDTO(BaseModel):

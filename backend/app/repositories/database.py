@@ -35,7 +35,8 @@ SCHEMA_STATEMENTS = (
         role TEXT NOT NULL CHECK (role IN ('user', 'bot')),
         type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio')),
         content TEXT NOT NULL,
-        sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+        media_url TEXT DEFAULT NULL,
+        sources JSONB DEFAULT NULL,
         satisfaction BOOLEAN DEFAULT NULL,
         created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
     );
@@ -49,7 +50,28 @@ SCHEMA_STATEMENTS = (
     """,
     """
     ALTER TABLE messages
-    ADD COLUMN IF NOT EXISTS sources JSONB NOT NULL DEFAULT '[]'::jsonb;
+    ADD COLUMN IF NOT EXISTS sources JSONB DEFAULT NULL;
+    """,
+    "ALTER TABLE messages ALTER COLUMN sources DROP NOT NULL;",
+    "ALTER TABLE messages ALTER COLUMN sources DROP DEFAULT;",
+    "UPDATE messages SET sources = NULL WHERE role = 'user';",
+    """
+    ALTER TABLE messages
+    ADD COLUMN IF NOT EXISTS media_url TEXT DEFAULT NULL;
+    """,
+    """
+    UPDATE messages
+    SET media_url = substring(content from '\\[IMAGE_URL:([^\\]]+)\\]')
+    WHERE media_url IS NULL
+      AND type = 'image'
+      AND content LIKE '[IMAGE_URL:%';
+    """,
+    """
+    UPDATE messages
+    SET media_url = substring(content from '\\[AUDIO_URL:([^\\]]+)\\]')
+    WHERE media_url IS NULL
+      AND type = 'audio'
+      AND content LIKE '[AUDIO_URL:%';
     """,
     """
     UPDATE messages
@@ -99,13 +121,11 @@ SCHEMA_STATEMENTS = (
         domain TEXT,
         user_email TEXT NOT NULL,
         summary TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome'),
-        updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
+        created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
     );
     """,
-    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE tickets ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
-    "ALTER TABLE tickets ALTER COLUMN updated_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
+    "ALTER TABLE tickets DROP COLUMN IF EXISTS updated_at;",
     "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_message_id UUID REFERENCES messages(id) ON DELETE SET NULL;",
     """
     DO $$
@@ -147,7 +167,6 @@ SCHEMA_STATEMENTS = (
         END IF;
     END $$;
     """,
-    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "DROP INDEX IF EXISTS idx_tickets_feedback_message_id;",
     "ALTER TABLE tickets DROP COLUMN IF EXISTS feedback_message_id;",
     "CREATE INDEX IF NOT EXISTS idx_tickets_escalated_message_id ON tickets(escalated_message_id);",

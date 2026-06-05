@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from backend.app.schemas.chat import SourceDTO
 
@@ -20,7 +20,8 @@ class PersistedMessageDTO(BaseModel):
     role: str
     type: str = "text"
     content: str
-    sources: list[SourceDTO] = Field(default_factory=list)
+    media_url: str | None = None
+    sources: list[SourceDTO] | None = None
     satisfaction: bool | None = None
     ticket_opened: bool = False
     created_at: datetime
