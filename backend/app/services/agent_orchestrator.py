@@ -12,6 +12,7 @@ from backend.app.services.llm_service import (
     human_operator_answer,
     unavailable_answer,
     is_refusal_answer,
+    answer_repeats_user_text,
     normalize_text,
     translate_text,
 )
@@ -105,13 +106,13 @@ async def generation_node(state: AgentState) -> Dict[str, Any]:
         response_language = plan.response_language if plan else state["language"]
         return {
             "answer": unavailable_answer(response_language),
-            "should_escalate": True,
+            "should_escalate": False,
             "escalation_reason": "no_context"
         }
     
     answer = await build_answer(message, plan, contexts, False, None, state["history"])
-    if is_refusal_answer(answer):
-        should_escalate = True
+    if is_refusal_answer(answer) or answer_repeats_user_text(answer, message):
+        should_escalate = False
         reason = "immediate_refusal"
         answer = unavailable_answer(plan.response_language)
         

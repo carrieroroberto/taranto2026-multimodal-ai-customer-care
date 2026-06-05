@@ -397,6 +397,13 @@
     display: none;
   }
 
+  .message-list-shell {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
   @media (max-width: 767px) {
     .language-select-desktop,
     .theme-toggle-desktop {
@@ -404,21 +411,19 @@
     }
 
     #messageList {
-      padding-bottom: 16px;
+      padding-bottom: 82px;
     }
 
     .floating-mobile-actions {
-      position: sticky;
-      bottom: 0;
+      position: absolute;
+      right: 18px;
+      bottom: 10px;
       z-index: 20;
       display: flex;
       align-items: center;
-      align-self: flex-end;
       gap: 10px;
-      margin-top: auto;
-      margin-right: 2px;
-      padding-top: 12px;
       direction: ltr;
+      pointer-events: auto;
     }
 
     .floating-mobile-actions .language-select-mobile {
@@ -764,8 +769,16 @@
     box-shadow: none;
   }
 
+  .chat-message-block {
+    @apply mb-5 flex w-full min-w-0 flex-col;
+  }
+
+  .chat-message-block-user {
+    align-items: flex-end;
+  }
+
   .chat-turn {
-    @apply mb-5 flex w-full min-w-0 items-start gap-3;
+    @apply flex w-full min-w-0 items-start gap-3;
   }
 
   .chat-turn-user {
@@ -814,6 +827,10 @@
   .chat-message-stack > .chat-bubble {
     width: fit-content;
     max-width: 100%;
+  }
+
+  .chat-message-stack-with-sources {
+    max-width: min(90%, calc(100% - 3.25rem));
   }
 
   .chat-turn-user .chat-message-stack {
@@ -894,6 +911,23 @@
     font-weight: 500;
   }
 
+  .message-timestamp {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 0.32rem;
+    margin-left: calc(2.5rem + 0.75rem + 0.15rem);
+    color: var(--feedback-text);
+    font-size: 0.8rem;
+    line-height: 1;
+    font-weight: 500;
+  }
+
+  .chat-message-block-user .message-timestamp {
+    align-self: flex-end;
+    margin-right: calc(2.5rem + 0.75rem + 0.15rem);
+    margin-left: 0;
+  }
+
   .message-feedback-button {
     display: inline-grid;
     place-items: center;
@@ -966,6 +1000,10 @@
 
     .feedback-helpful-text {
       min-height: 2.22rem;
+      font-size: 0.8rem;
+    }
+
+    .message-timestamp {
       font-size: 0.8rem;
     }
   }
@@ -1064,12 +1102,12 @@
   .source-favicons {
     display: inline-flex;
     align-items: center;
-    gap: 0.24rem;
-    max-width: 100%;
-    margin-left: 0.5rem;
-    vertical-align: -0.25rem;
-    white-space: normal;
-    flex-wrap: wrap;
+    gap: 0.16rem;
+    margin-left: 0.34rem;
+    white-space: nowrap;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    vertical-align: -0.42rem;
   }
 
   .source-favicon-link {
@@ -1084,13 +1122,12 @@
     border-radius: 999px;
     background: var(--composer-shell-bg);
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-    transition:
-      background 160ms ease,
-      transform 160ms ease;
+    transform: translateY(-1px);
+    transition: background 160ms ease;
   }
 
   .source-favicon-link:hover {
-    transform: translateY(-1px);
+    background: var(--composer-shell-bg);
   }
 
   .source-favicon-link img {
@@ -1122,13 +1159,11 @@
     background: #ffffff;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
     color: #4285F4;
-    transition:
-      background 160ms ease,
-      transform 160ms ease;
+    transform: translateY(-1px);
+    transition: background 160ms ease;
   }
 
   .source-maps-link:hover {
-    transform: translateY(-1px);
     background: #f8fafc;
   }
 
@@ -1151,9 +1186,8 @@
     }
 
     .source-favicons {
-      gap: 0.18rem;
-      margin-left: 0.38rem;
-      vertical-align: -0.22rem;
+      gap: 0.14rem;
+      margin-left: 0.34rem;
     }
 
     .source-favicon-link,
@@ -1355,6 +1389,10 @@
 @media (min-width: 640px) {
   .chat-message-stack {
     max-width: min(72%, calc(100% - 3.25rem));
+  }
+
+  .chat-message-stack-with-sources {
+    max-width: min(90%, calc(100% - 3.25rem));
   }
 }
 

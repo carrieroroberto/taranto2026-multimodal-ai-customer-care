@@ -49,6 +49,7 @@ export function ChatPage() {
   const messageListRef = useRef(null);
   const abortControllerRef = useRef(null);
   const scrollAnimationFrameRef = useRef(null);
+  const scrollScheduleFrameRef = useRef(null);
   
   const [shouldScroll, setShouldScroll] = useState(true);
   
@@ -124,16 +125,76 @@ export function ChatPage() {
 
   useEffect(() => {
     if (shouldScroll) {
-      scrollMessagesToBottom("smooth");
+      scheduleScrollMessagesToBottom("smooth");
     }
   }, [messages, shouldScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollAnimationFrameRef.current) {
+        window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+      }
+      if (scrollScheduleFrameRef.current) {
+        window.cancelAnimationFrame(scrollScheduleFrameRef.current);
+      }
+    };
+  }, []);
 
   function scrollMessagesToBottom(behavior = "smooth") {
     const messageListElement = messageListRef.current;
     if (!messageListElement) return;
 
     const targetTop = Math.max(0, messageListElement.scrollHeight - messageListElement.clientHeight);
-    messageListElement.scrollTo({ top: targetTop, behavior });
+    if (behavior !== "smooth") {
+      messageListElement.scrollTo({ top: targetTop, behavior });
+      return;
+    }
+
+    animateMessageScroll(messageListElement, targetTop);
+  }
+
+  function scheduleScrollMessagesToBottom(behavior = "smooth") {
+    if (scrollScheduleFrameRef.current) {
+      window.cancelAnimationFrame(scrollScheduleFrameRef.current);
+    }
+
+    scrollScheduleFrameRef.current = window.requestAnimationFrame(() => {
+      scrollScheduleFrameRef.current = window.requestAnimationFrame(() => {
+        scrollScheduleFrameRef.current = null;
+        scrollMessagesToBottom(behavior);
+      });
+    });
+  }
+
+  function animateMessageScroll(messageListElement, targetTop) {
+    if (scrollAnimationFrameRef.current) {
+      window.cancelAnimationFrame(scrollAnimationFrameRef.current);
+    }
+
+    const startTop = messageListElement.scrollTop;
+    const distance = targetTop - startTop;
+    if (Math.abs(distance) < 1) {
+      messageListElement.scrollTop = targetTop;
+      return;
+    }
+
+    const durationMs = 260;
+    const startedAt = performance.now();
+
+    function step(now) {
+      const progress = Math.min(1, (now - startedAt) / durationMs);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      messageListElement.scrollTop = startTop + distance * eased;
+
+      if (progress < 1) {
+        scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
+      } else {
+        scrollAnimationFrameRef.current = null;
+        messageListElement.scrollTop = targetTop;
+      }
+    }
+
+    scrollAnimationFrameRef.current = window.requestAnimationFrame(step);
   }
 
   function handleStop() {
@@ -153,8 +214,12 @@ export function ChatPage() {
     // CASO INVIO EMAIL TICKET
     if (isEscalating) {
       const supportEmail = message.trim();
+      const feedbackTarget = findTicketFeedbackTarget(messages);
+      const escalationFlowFor = feedbackTarget?.id || findActiveEscalationFlowId(messages);
       const userMessage = createMessage("user", supportEmail);
       const pendingMessage = createMessage("assistant", "", true);
+      userMessage.escalationFlowFor = escalationFlowFor;
+      pendingMessage.escalationFlowFor = escalationFlowFor;
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
@@ -184,7 +249,6 @@ export function ChatPage() {
 
         const lastBotWithConv = [...messages].reverse().find(m => m.conversationId);
         const conversationId = lastBotWithConv?.conversationId || sessionIdRef.current;
-        const feedbackTarget = findTicketFeedbackTarget(messages);
         const feedbackMessageId = feedbackTarget?.persistedId || null;
 
         const ticketResponse = await sendTicket({
@@ -255,7 +319,9 @@ export function ChatPage() {
       patchMessage(pendingMessage.id, {
         persistedId: response.bot_message_id || null,
         conversationId: response.conversation_id || null,
+        createdAt: response.bot_created_at || pendingMessage.createdAt,
         feedbackDisabled: Boolean(response.should_escalate || response.needs_email_for_ticket),
+        escalationFlowFor: response.needs_email_for_ticket ? pendingMessage.id : null,
         text: response.answer || t.unavailableAnswer,
         sources: normalizeSources(response.sources),
         isLoading: false,
@@ -264,15 +330,14 @@ export function ChatPage() {
       patchMessage(userMessage.id, {
         persistedId: response.user_message_id || null,
         conversationId: response.conversation_id || null,
+        createdAt: response.user_created_at || userMessage.createdAt,
       });
 
-      if (response.language && response.language !== locale) {
+      if (response.language_detected && response.language && response.language !== locale) {
         setLocale(response.language);
       }
 
-      // TRIGGER ESCALATION SE IL BOT NON SA RISPONDERE O SE RICHIESTO DAL BACKEND
-      const isRefusal = isRefusalText(response.answer, t.unavailableAnswer);
-      if (response.needs_email_for_ticket || isRefusal) {
+      if (response.needs_email_for_ticket) {
         setIsEscalating(true);
       }
     } catch (error) {
@@ -339,7 +404,9 @@ export function ChatPage() {
       patchMessage(pendingMessage.id, {
         persistedId: response.bot_message_id || null,
         conversationId: response.conversation_id || null,
+        createdAt: response.bot_created_at || pendingMessage.createdAt,
         feedbackDisabled: Boolean(response.should_escalate || response.needs_email_for_ticket),
+        escalationFlowFor: response.needs_email_for_ticket ? pendingMessage.id : null,
         text: response.answer || t.unavailableAnswer,
         sources: normalizeSources(response.sources),
         isLoading: false,
@@ -347,9 +414,10 @@ export function ChatPage() {
       patchMessage(userMessage.id, {
         persistedId: response.user_message_id || null,
         conversationId: response.conversation_id || null,
+        createdAt: response.user_created_at || userMessage.createdAt,
       });
 
-      if (response.language && response.language !== locale) {
+      if (response.language_detected && response.language && response.language !== locale) {
         setLocale(response.language);
       }
 
@@ -431,6 +499,7 @@ export function ChatPage() {
         const apologyMsg = createMessage("assistant", apologyText);
         apologyMsg.conversationId = message.conversationId;
         apologyMsg.feedbackSupportFor = message.id;
+        apologyMsg.escalationFlowFor = message.id;
         setMessages(prev => [...prev, apologyMsg]);
         // Se scatta l'escalation, allora torniamo a scrollare verso il basso
         setShouldScroll(true);
@@ -440,7 +509,7 @@ export function ChatPage() {
         if (messages.find(m => m.feedbackSupportFor === message.id)) {
            setIsEscalating(false);
            setMessages(prev =>
-             prev.filter(existingMessage => existingMessage.feedbackSupportFor !== message.id),
+             prev.filter(existingMessage => !isEscalationFlowMessage(existingMessage, message.id)),
            );
         }
       }
@@ -452,20 +521,23 @@ export function ChatPage() {
 
   async function handleCancelEscalation() {
     const feedbackTarget = findTicketFeedbackTarget(messages);
+    const escalationFlowId = feedbackTarget?.id || findActiveEscalationFlowId(messages);
 
     setIsEscalating(false);
+    setShouldScroll(true);
 
-    if (!feedbackTarget) {
+    if (!escalationFlowId) {
+      scheduleScrollMessagesToBottom("smooth");
       return;
     }
 
-    const targetMessageId = feedbackTarget.persistedId || feedbackTarget.id;
+    const targetMessageId = feedbackTarget?.persistedId || feedbackTarget?.id;
 
     setMessages(prev =>
       prev
-        .filter(existingMessage => existingMessage.feedbackSupportFor !== feedbackTarget.id)
+        .filter(existingMessage => !isEscalationFlowMessage(existingMessage, escalationFlowId))
         .map(existingMessage =>
-          existingMessage.id === feedbackTarget.id
+          feedbackTarget && existingMessage.id === feedbackTarget.id
             ? { ...existingMessage, satisfaction: null }
             : existingMessage,
         ),
@@ -561,9 +633,11 @@ function createMessage(role, text, isLoading = false) {
     text,
     persistedId: null,
     conversationId: null,
+    createdAt: new Date().toISOString(),
     messageType: "text",
     satisfaction: null,
     feedbackLocked: false,
+    escalationFlowFor: null,
     isLoading,
     isError: false,
   };
@@ -596,8 +670,9 @@ function mapPersistedMessage(m) {
       text = text.replace(urlMatch[0], "").trim();
     }
 
-    const originalMessageMatch = text.split("\nDescrizione immagine:")[0];
-    const userPrompt = originalMessageMatch.replace("Immagine inviata dall'utente.", "").trim();
+    const userPrompt = stripHiddenMultimodalText(text)
+      .replace("Immagine inviata dall'utente.", "")
+      .trim();
     text = userPrompt;
     
     // Se per vecchi messaggi non abbiamo salvato l'immagine, mettiamo un placeholder testuale
@@ -610,6 +685,7 @@ function mapPersistedMessage(m) {
       audio = { url: urlMatch[1] };
       text = text.replace(urlMatch[0], "").trim();
     }
+    text = "";
     if (text === "[AUDIO_INCOMPRENSIBILE]") {
       text = "🎤 [Audio non trascritto]";
     }
@@ -628,9 +704,18 @@ function mapPersistedMessage(m) {
     satisfaction: m.satisfaction ?? null,
     feedbackLocked: Boolean(m.ticket_opened),
     feedbackDisabled: isEscalationText(text),
+    createdAt: m.created_at || null,
     isLoading: false,
     isError: false,
   };
+}
+
+function stripHiddenMultimodalText(value) {
+  return String(value || "")
+    .split("\nDescrizione immagine:")[0]
+    .split("\nTesto estratto dall'immagine:")[0]
+    .split("\nAnalisi immagine:")[0]
+    .trim();
 }
 
 function findTicketFeedbackTarget(messages) {
@@ -648,23 +733,18 @@ function findTicketFeedbackTarget(messages) {
   );
 }
 
-function isRefusalText(text, fallbackText) {
-  if (!text) return false;
-  if (text === fallbackText) return true;
-  
-  const normalized = String(text)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-    
+function findActiveEscalationFlowId(messages) {
+  const activeMessage = [...messages]
+    .reverse()
+    .find((message) => message.escalationFlowFor);
+  return activeMessage?.escalationFlowFor || null;
+}
+
+function isEscalationFlowMessage(message, flowId) {
   return (
-    normalized.includes("non ho un dato abbastanza preciso") ||
-    normalized.includes("preparare una richiesta per un operatore") ||
-    normalized.includes("non ho informazioni") ||
-    normalized.includes("canale ufficiale") ||
-    normalized.includes("non sono in grado di rispondere") ||
-    normalized.includes("i don't have enough precise data") ||
-    normalized.includes("prepare a request for an operator")
+    message.escalationFlowFor === flowId ||
+    message.feedbackSupportFor === flowId ||
+    message.id === flowId && message.feedbackDisabled && isEscalationText(message.text)
   );
 }
 
@@ -678,8 +758,6 @@ function isEscalationText(text) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
   return (
-    normalized.includes("non ho un dato abbastanza preciso") ||
-    normalized.includes("preparare una richiesta per un operatore") ||
     normalized.includes("inserisci l'email") ||
     normalized.includes("scrivi la tua email") ||
     normalized.includes("enter your email") ||

@@ -18,13 +18,13 @@ SCHEMA_STATEMENTS = (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
     );
     """,
     """
     CREATE TABLE IF NOT EXISTS conversations (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
     );
     """,
     "ALTER TABLE conversations DROP COLUMN IF EXISTS ai_summary;",
@@ -37,9 +37,12 @@ SCHEMA_STATEMENTS = (
         content TEXT NOT NULL,
         sources JSONB NOT NULL DEFAULT '[]'::jsonb,
         satisfaction BOOLEAN DEFAULT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
     );
     """,
+    "ALTER TABLE operators ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
+    "ALTER TABLE conversations ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
+    "ALTER TABLE messages ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     """
     ALTER TABLE messages
     ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text';
@@ -96,10 +99,13 @@ SCHEMA_STATEMENTS = (
         domain TEXT,
         user_email TEXT NOT NULL,
         summary TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome'),
+        updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
     );
     """,
+    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
+    "ALTER TABLE tickets ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
+    "ALTER TABLE tickets ALTER COLUMN updated_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS feedback_message_id UUID REFERENCES messages(id) ON DELETE SET NULL;",
     """
     DO $$
@@ -129,7 +135,7 @@ SCHEMA_STATEMENTS = (
         END IF;
     END $$;
     """,
-    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();",
+    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "CREATE INDEX IF NOT EXISTS idx_tickets_feedback_message_id ON tickets(feedback_message_id);",
     "ALTER TABLE messages DROP COLUMN IF EXISTS ticket_opened;",
     "ALTER TABLE tickets DROP COLUMN IF EXISTS ai_summary;",

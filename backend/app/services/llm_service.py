@@ -32,10 +32,12 @@ Compiti:
 - la lingua va rilevata da zero sul messaggio corrente: NON copiarla dalla lingua UI e NON copiarla dalla cronologia;
 - se il messaggio corrente e' chiaramente in una delle lingue supportate, usa quella lingua anche se la UI corrente e' diversa;
 - usa la lingua UI corrente solo se il messaggio e' ambiguo, troppo corto o in una lingua non supportata;
+- se il messaggio e' composto da caratteri casuali, sigle senza significato o testo non interpretabile, language deve essere la lingua UI corrente;
 - traduci semanticamente la richiesta in italiano per la ricerca nella knowledge base;
 - correggi refusi evidenti;
 - produci query di retrieval sempre in italiano;
 - non inventare fatti, date, prezzi, sedi, link o risultati.
+- se non riesci a capire la richiesta, non ripetere e non citare mai il testo originale dell'utente nella risposta finale.
 
 Schema JSON obbligatorio:
 {
@@ -73,6 +75,7 @@ FALLBACK_LANGUAGE_QUERY_PROMPT = """Analizza il messaggio utente e restituisci s
 Devi rilevare la lingua del messaggio corrente tra it, en, es, fr, ar e produrre la query italiana per il retrieval.
 Non usare la lingua UI se il messaggio corrente e' chiaramente in una lingua supportata.
 Usa la lingua UI solo se il messaggio e' ambiguo o in lingua non supportata.
+Se il messaggio e' composto da caratteri casuali o testo non interpretabile, usa la lingua UI corrente.
 
 Schema:
 {
@@ -192,6 +195,7 @@ async def build_query_plan(
     ui_language: str = "it",
 ) -> QueryPlan:
     fallback_language = normalize_language_code(ui_language)
+    language_is_ambiguous = is_language_ambiguous(message)
     history_context = ""
     if history:
         history_context = "Cronologia recente:\n" + "\n".join(
@@ -229,6 +233,8 @@ async def build_query_plan(
             or fallback_language,
             fallback_language,
         )
+        if language_is_ambiguous:
+            response_language = fallback_language
         domains = normalize_domains(plan_data.get("domains", []), "general")
         query_it = first_non_empty(
             plan_data.get("query_it"),
@@ -255,17 +261,26 @@ async def build_query_plan(
             response_language=response_language,
             needs_clarification=bool(plan_data.get("needs_clarification", False)),
             clarification_question=optional_string(plan_data.get("clarification_question")),
+            language_detected=not language_is_ambiguous,
         )
     except Exception as exc:
         logger.warning("query_plan_fallback error=%s", exc)
         fallback_query, detected_language = await fallback_query_analysis(message, fallback_language)
-        return fallback_query_plan(message, fallback_query, detected_language)
+        if language_is_ambiguous:
+            detected_language = fallback_language
+        return fallback_query_plan(
+            message,
+            fallback_query,
+            detected_language,
+            language_detected=not language_is_ambiguous,
+        )
 
 
 def fallback_query_plan(
     message: str,
     retrieval_query: str | None = None,
     response_language: str = "it",
+    language_detected: bool = True,
 ) -> QueryPlan:
     query_it = (retrieval_query or message).strip() or message
     return QueryPlan(
@@ -280,6 +295,7 @@ def fallback_query_plan(
         entities={k: None for k in ENTITY_KEYS},
         response_language=normalize_language_code(response_language),
         needs_clarification=False,
+        language_detected=language_detected,
     )
 
 
@@ -294,7 +310,8 @@ async def generate_grounded_answer(prompt: str, language_code: str) -> str:
         f"3. Se nel contesto si parla di una MASCOTTE (Ionios), e la descrizione visiva riporta un animale marino stilizzato o colorato, CONFERMA che si tratta di Ionios. NON dire che è un delfino o altro se non è scritto nel contesto.\n"
         f"4. Se l'informazione non è nel contesto, dì chiaramente che non lo sai.\n"
         f"5. Rispondi SOLO in {language_name}.\n"
-        f"6. NON USARE MAI asterischi (**), grassetto o corsivo. Scrivi solo testo semplice."
+        f"6. NON USARE MAI asterischi (**), grassetto o corsivo. Scrivi solo testo semplice.\n"
+        f"7. Se non capisci la richiesta o non trovi dati utili, non ripetere e non citare mai il testo dell'utente."
     )
     
     payload = {
@@ -362,9 +379,36 @@ def explicit_operator_requested(message: str) -> bool:
 def is_refusal_answer(answer: str) -> bool:
     normalized = normalize_text(answer)
     refusal_keywords = [
+        "non so",
+        "non lo so",
+        "non capisco",
+        "non ho capito",
+        "non riesco a capire",
+        "non riesco a comprendere",
+        "potresti riformulare",
+        "puoi riformulare",
+        "fornire piu contesto",
         "informazioni sufficienti", 
         "non ho informazioni", 
+        "non ho trovato",
+        "i don t know",
+        "i don't know",
         "i don't have enough information",
+        "could not find",
+        "couldn't find",
+        "do not understand",
+        "don't understand",
+        "please rephrase",
+        "provide more context",
+        "no lo se",
+        "no entiendo",
+        "no he entendido",
+        "puedes reformular",
+        "podrias reformular",
+        "je ne sais pas",
+        "je ne comprends pas",
+        "pourriez vous reformuler",
+        "pouvez vous reformuler",
         "non posso rispondere",
         "inserisci l'email",
         "scrivi la tua email",
@@ -372,6 +416,19 @@ def is_refusal_answer(answer: str) -> bool:
         "verrai ricontattato da un operatore"
     ]
     return any(kw in normalized for kw in refusal_keywords)
+
+
+def answer_repeats_user_text(answer: str, message: str) -> bool:
+    normalized_answer = normalize_text(answer)
+    normalized_message = normalize_text(message)
+    if not normalized_answer or not normalized_message:
+        return False
+
+    tokens = normalized_message.split()
+    if len(tokens) < 2 or len(normalized_message) < 16:
+        return False
+
+    return normalized_message in normalized_answer
 
 
 def human_operator_answer(response_language: str = "it") -> str:
@@ -388,11 +445,11 @@ def human_operator_answer(response_language: str = "it") -> str:
 
 def unavailable_answer(response_language: str = "it") -> str:
     answers = {
-        "it": "Al momento non ho un dato abbastanza preciso per risponderti con sicurezza. Posso indicarti il canale ufficiale o preparare una richiesta per un operatore.",
-        "en": "I don't have enough precise information to answer you with certainty right now. I can direct you to the official channel or prepare a request for an operator.",
-        "es": "No tengo informazioni sufficientemente precisa para responderte con sicurezza in questo momento. Puedo dirigirte al canal oficial o preparar una solicitud para un operador.",
-        "fr": "Je n'ai pas d'informations suffisamment précises pour vous rispondere avec certitude pour le moment. Je peux vous diriger vers le canal officiel ou préparer una demande pour un opérateur.",
-        "ar": "ليس لدي معلومات دقيقة كافية للإجابة عليك بيقين in الوقت الحالي. يمكنني توجيهك إلى القناة الرسمية أو إعداد طلب لموظف."
+        "it": "Al momento non ho un dato abbastanza preciso per risponderti con sicurezza.",
+        "en": "I don't have enough precise information to answer you with certainty right now.",
+        "es": "No tengo información suficientemente precisa para responderte con seguridad en este momento.",
+        "fr": "Je n'ai pas d'informations suffisamment précises pour vous répondre avec certitude pour le moment.",
+        "ar": "لا أملك معلومات دقيقة بما يكفي للإجابة عليك بثقة في الوقت الحالي.",
     }
     lang = normalize_language_code(response_language)
     return answers.get(lang, answers["it"])
@@ -500,6 +557,37 @@ def normalize_language_code(code: str | None, fallback: str = "it") -> str:
 
 def response_language_name(code: str) -> str:
     return LANGUAGE_NAMES.get(code.lower(), "Italiano")
+
+
+def is_language_ambiguous(message: str) -> bool:
+    text = str(message or "").strip()
+    if not text:
+        return True
+
+    letters = [ch for ch in text if ch.isalpha()]
+    if len(letters) < 3:
+        return True
+
+    # Script non latino leggibile: lasciamo che il planner gestisca la lingua.
+    if re.search(r"[\u0600-\u06ff]", text):
+        return False
+
+    latin_tokens = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]+", text)
+    if not latin_tokens:
+        return True
+
+    token_count = len(latin_tokens)
+    total_latin_letters = sum(len(token) for token in latin_tokens)
+    vowels = sum(1 for ch in "".join(latin_tokens).lower() if ch in "aeiouàèéìòóùáíúü")
+    vowel_ratio = vowels / max(total_latin_letters, 1)
+
+    if token_count == 1 and total_latin_letters >= 5 and vowel_ratio < 0.22:
+        return True
+
+    if token_count <= 2 and total_latin_letters >= 8 and vowel_ratio < 0.18:
+        return True
+
+    return False
 
 
 def optional_string(value: Any) -> str | None:

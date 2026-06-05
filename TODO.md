@@ -15,20 +15,21 @@ DONE:
 
 - se l'utente preme la X per annullare il processo di ticketing deve essere cancellato il messaggio di help di attesa email utente del bot e il pulsante feedback che ha generato la potenziale richiesta di help deve essere riportato a nessuno stato (nessuno dei due pulsanti feedback premuti). poi ancora non è centrato perfettamentre emoji su tutti i dispositivi, perché lo span non ha spazi interni sopra e sotto uguali per conformazione propria dell'emoji dei pollici.
 
-
-
-TO DO:
 - non mi piace l'effetto quando togli il messaggio di helper premendo sulla X, che si sollevano anche i floating buttons su mobile. non devi muovere la posizione dei floating in alto, ma bensì devo scorrere la chat verso il basso, fino al limite impostato a ridosso dei floating button, che restano fermi.
 
-- poi nel db, voglio che created_at segua il vero orario che ho io sul pc e comunque noi qui in italia. di conseguenza, voglio anche data e ora sotto i messaggi sia user che bot con lo stesso stile del testo "ti è stato utile?" del feedback, aumenta grandezza del font di ti è stato utile in primis.
+- poi nel db, voglio che created_at segua il vero orario che ho io sul pc e comunque noi qui in italia. di conseguenza, voglio anche data e ora sotto i messaggi sia user che bot con lo stesso stile del testo "ti è stato utile?" del feedback.
+
+- chat_user e chat_user_dark ora sono la stessa immagine come contenuto, utilizza solo chat_user come default per entrambe le modalità e elimina chat_user_dark come riferimento e come asset.
 
 - immagini e audio non devono aggiungere trascrizioni e estrazioni di testo al messaggio in chiaro, le info estratte devono essere usate solo under the hood, non mostrare trascrizioni/estrazioni di nulla nei messaggi.
 
-- quando passo da arabo a un altra lingua poi non viene mantenuto il distacco dai pulsanti floating all'ultimo messaggio come invece avviene passando da una lingua all'altra (non arabo). solo su mobile. quindi voglio che mi riporti a ogni switch di lingua quanto piu giu possibile nella message area, nello stesso modo che succede quando appare un nuovo messaggio nella chat.
+
+TO DO:
+- voglio che anche messaggi precedenti possano aprire escalation anche se non sono ultimo messaggio inviato. semplicemente invece di avere feedbakc_message_id nella tabella tickets viene salvato escalated_message_id ovvero id della tabella messages relativo al messaggio su cui è stato richiesto il feedback. unico vincolo mentre è aperta una richiesta di escalation non posso premere altri feedback negativi e duplicarle escalation, uno per volta ma anche in maniera retroattiva.
 
 - text to speech lato frontend su tutti i dispositivi quando l'utente invia un messaggio vocale la risposta, oltre a essere visualizzata in maniera testuale come ogni messaggio deve essere anche letta in automatico nella stessa lingua impostata nella UI, solo una volta quando la risposta viene ricevuta dal bot e compare nella chat.
 
-- chat_user e chat_user_dark ora sono la stessa immagine come contenuto, utilizza solo chat_user come default per entrambe le modalità e elimina chat_user_dark come riferimento e come asset.
+- quando passo da arabo a un altra lingua poi non viene mantenuto il distacco dai pulsanti floating all'ultimo messaggio come invece avviene passando da una lingua all'altra (non arabo). solo su mobile. quindi voglio che mi riporti a ogni switch di lingua quanto piu giu possibile nella message area, nello stesso modo che succede quando appare un nuovo messaggio nella chat.
 
 - verifiche ridondanze in tutta la codebase o elementi non utilizzati o non rilevanti, mantenendo il funzionamento e lo stile.
 

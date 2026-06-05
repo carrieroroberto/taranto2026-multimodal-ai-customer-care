@@ -61,6 +61,7 @@ class QueryPlan:
     retrieval_queries: list[PlannedRetrievalQuery] = field(default_factory=list)
     needs_clarification: bool = False
     clarification_question: str | None = None
+    language_detected: bool = True
 
 
 @dataclass

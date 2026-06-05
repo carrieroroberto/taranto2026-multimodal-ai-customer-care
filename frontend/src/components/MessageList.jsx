@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { chatBotUrl, chatUserDarkUrl, chatUserUrl } from "../assets/index.js";
+import { chatBotUrl, chatUserUrl } from "../assets/index.js";
 import { ImageLightbox } from "./ImageLightbox.jsx";
 
 const FALLBACK_SOURCE_ICON = "/icons/source-fallback.svg";
@@ -13,7 +13,6 @@ export function MessageList({
   listRef,
   mobileActionSlot,
   suggestedQuestions = [],
-  theme,
   t,
   onContentLoad,
   onFeedback,
@@ -23,28 +22,29 @@ export function MessageList({
 
   return (
     <>
-      <div
-        ref={listRef}
-        id="messageList"
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
-      >
-        <div aria-live="polite">
-          {messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              theme={theme}
-              t={t}
-              onImageOpen={setPreviewImage}
-              onContentLoad={onContentLoad}
-              feedbackCanCorrectNegative={feedbackCanCorrectNegative}
-              feedbackDisabled={feedbackDisabled}
-              onFeedback={onFeedback}
-              onSuggestionClick={onSuggestionClick}
-              showSuggestions={!isSending}
-              suggestedQuestions={suggestedQuestions}
-            />
-          ))}
+      <div className="message-list-shell">
+        <div
+          ref={listRef}
+          id="messageList"
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8"
+        >
+          <div aria-live="polite">
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                t={t}
+                onImageOpen={setPreviewImage}
+                onContentLoad={onContentLoad}
+                feedbackCanCorrectNegative={feedbackCanCorrectNegative}
+                feedbackDisabled={feedbackDisabled}
+                onFeedback={onFeedback}
+                onSuggestionClick={onSuggestionClick}
+                showSuggestions={!isSending}
+                suggestedQuestions={suggestedQuestions}
+              />
+            ))}
+          </div>
         </div>
         {mobileActionSlot}
       </div>
@@ -59,7 +59,6 @@ export function MessageList({
 
 function ChatMessage({
   message,
-  theme,
   t,
   onImageOpen,
   onContentLoad,
@@ -71,12 +70,17 @@ function ChatMessage({
   suggestedQuestions,
 }) {
   const isUser = message.role === "user";
-  const userAvatarUrl = theme === "dark" ? chatUserDarkUrl : chatUserUrl;
   const sources = getVisibleSources(message, isUser);
+  const blockClassName = isUser
+    ? "chat-message-block chat-message-block-user"
+    : "chat-message-block";
   const turnClassName = isUser ? "chat-turn chat-turn-user" : "chat-turn";
   const avatarClassName = isUser
     ? "chat-avatar chat-avatar-user"
     : "chat-avatar chat-avatar-assistant";
+  const stackClassName = sources.length
+    ? "chat-message-stack chat-message-stack-with-sources"
+    : "chat-message-stack";
   const bubbleClassName = isUser
     ? `chat-bubble chat-bubble-user${message.image ? " chat-bubble-image" : ""}`
     : message.isError
@@ -84,76 +88,90 @@ function ChatMessage({
       : `chat-bubble chat-bubble-assistant${sources.length ? " chat-bubble-with-sources" : ""}`;
 
   return (
-    <article className={turnClassName}>
-      <div className={avatarClassName}>
-        <img
-          src={isUser ? userAvatarUrl : chatBotUrl}
-          alt={isUser ? t.userLabel : t.botName}
-        />
-      </div>
-      <div className="chat-message-stack">
-        <div className={bubbleClassName}>
-          {message.isLoading ? (
-            <TypingIndicator label={t.typing} />
-          ) : message.translationKey === "welcome" ? (
-            <WelcomeMessage t={t} />
-          ) : (
-            <>
-              {message.image ? (
-                <button
-                  className="message-image-button"
-                  type="button"
-                  aria-label="Apri immagine"
-                  onClick={() => onImageOpen(message.image)}
-                >
-                  <img
-                    className="message-image-preview"
-                    src={message.image}
-                    alt=""
-                    aria-hidden="true"
-                    onLoad={onContentLoad}
-                  />
-                </button>
-              ) : null}
-              {message.audio ? (
-                <AudioWaveform audio={message.audio} label={t.audioMessage} />
-              ) : null}
-              {message.text && message.messageType !== "audio" && sources.length ? (
-                <TextWithInlineSources
-                  className={
-                    message.image ? "message-text message-text-under-media" : ""
-                  }
-                  sources={sources}
-                  text={message.text}
-                />
-              ) : message.text && message.messageType !== "audio" ? (
-                <span
-                  className={
-                    message.image ? "message-text message-text-under-media" : ""
-                  }
-                >
-                  {message.text}
-                </span>
-              ) : null}
-            </>
-          )}
-        </div>
-        {message.translationKey === "welcome" ? (
-          <WelcomeSuggestions
-            disabled={!showSuggestions}
-            questions={suggestedQuestions}
-            onSuggestionClick={onSuggestionClick}
+    <article className={blockClassName}>
+      {!message.translationKey && !message.isLoading ? (
+        <MessageTimestamp timestamp={message.createdAt} />
+      ) : null}
+      <div className={turnClassName}>
+        <div className={avatarClassName}>
+          <img
+            src={isUser ? chatUserUrl : chatBotUrl}
+            alt={isUser ? t.userLabel : t.botName}
           />
-        ) : null}
-        <MessageFeedback
-          disabled={feedbackDisabled}
-          message={message}
-          t={t}
-          onFeedback={onFeedback}
-        />
+        </div>
+        <div className={stackClassName}>
+          <div className={bubbleClassName}>
+            {message.isLoading ? (
+              <TypingIndicator label={t.typing} />
+            ) : message.translationKey === "welcome" ? (
+              <WelcomeMessage t={t} />
+            ) : (
+              <>
+                {message.image ? (
+                  <button
+                    className="message-image-button"
+                    type="button"
+                    aria-label="Apri immagine"
+                    onClick={() => onImageOpen(message.image)}
+                  >
+                    <img
+                      className="message-image-preview"
+                      src={message.image}
+                      alt=""
+                      aria-hidden="true"
+                      onLoad={onContentLoad}
+                    />
+                  </button>
+                ) : null}
+                {message.audio ? (
+                  <AudioWaveform audio={message.audio} label={t.audioMessage} />
+                ) : null}
+                {message.text && message.messageType !== "audio" && sources.length ? (
+                  <TextWithInlineSources
+                    className={
+                      message.image ? "message-text message-text-under-media" : ""
+                    }
+                    sources={sources}
+                    text={message.text}
+                  />
+                ) : message.text && message.messageType !== "audio" ? (
+                  <span
+                    className={
+                      message.image ? "message-text message-text-under-media" : ""
+                    }
+                  >
+                    {message.text}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </div>
+          {message.translationKey === "welcome" ? (
+            <WelcomeSuggestions
+              disabled={!showSuggestions}
+              questions={suggestedQuestions}
+              onSuggestionClick={onSuggestionClick}
+            />
+          ) : null}
+          <MessageFeedback
+            disabled={feedbackDisabled}
+            message={message}
+            t={t}
+            onFeedback={onFeedback}
+          />
+        </div>
       </div>
     </article>
   );
+}
+
+function MessageTimestamp({ timestamp }) {
+  const label = formatMessageTimestamp(timestamp);
+  if (!label) {
+    return null;
+  }
+
+  return <span className="message-timestamp">{label}</span>;
 }
 
 function MessageFeedback({ disabled, message, t, onFeedback }) {
@@ -210,6 +228,32 @@ function MessageFeedback({ disabled, message, t, onFeedback }) {
   );
 }
 
+function formatMessageTimestamp(timestamp) {
+  if (!timestamp) {
+    return "";
+  }
+
+  const normalizedTimestamp =
+    typeof timestamp === "string" ? timestamp.replace(" ", "T") : timestamp;
+  const date = new Date(normalizedTimestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const datePart = new Intl.DateTimeFormat("it-IT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+
+  return `${datePart}, ${timePart}`;
+}
+
 function WelcomeSuggestions({ disabled, questions, onSuggestionClick }) {
   if (!questions.length) {
     return null;
@@ -236,6 +280,7 @@ function TextWithInlineSources({ className, sources, text }) {
   return (
     <span className={className ? `${className} message-text-with-sources` : "message-text-with-sources"}>
       <span>{text}</span>
+      {"\u00a0"}
       <SourceFavicons sources={sources} />
     </span>
   );

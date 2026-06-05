@@ -65,7 +65,7 @@ def save_message(
             cursor.execute(
                 """
                 INSERT INTO messages (conversation_id, role, type, content, sources, created_at)
-                VALUES (%s, %s, %s, %s, %s, clock_timestamp())
+                VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
                 RETURNING id, conversation_id, role, type, content, sources, satisfaction, created_at
                 """,
                 (resolved_id, role, message_type, content, Jsonb(normalize_sources_for_storage(sources))),
@@ -336,7 +336,7 @@ def update_ticket_status(ticket_id: str, status: str) -> dict[str, Any] | None:
             cursor.execute(
                 """
                 UPDATE tickets
-                SET status = %s, updated_at = clock_timestamp()
+                SET status = %s, updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome'
                 WHERE id = %s
                 RETURNING id, status, updated_at
                 """,

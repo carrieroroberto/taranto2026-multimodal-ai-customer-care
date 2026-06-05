@@ -62,7 +62,7 @@ async def chat_audio_endpoint(
     if not extracted_text:
         extracted_text = "[AUDIO_INCOMPRENSIBILE]"
 
-    stored_user_content = f"[AUDIO_URL:{audio_url}]\n{extracted_text}"
+    stored_user_content = f"[AUDIO_URL:{audio_url}]"
 
     response = await answer_chat(
         ChatRequestDTO(
@@ -73,7 +73,7 @@ async def chat_audio_endpoint(
             stored_user_content=stored_user_content,
         )
     )
-    response.extracted_text = extracted_text if extracted_text != "[AUDIO_INCOMPRENSIBILE]" else None
+    response.extracted_text = None
     return response
 
 
@@ -108,12 +108,10 @@ async def chat_multimodal_endpoint(
                 session_id=session_id,
                 language=language,
                 message_type="audio",
-                stored_user_content=extracted_text,
+                stored_user_content="[AUDIO]",
             )
         )
-        response.extracted_text = (
-            extracted_text if extracted_text != "[AUDIO_INCOMPRENSIBILE]" else None
-        )
+        response.extracted_text = None
         return response
     elif content_type.startswith("image/"):
         os.makedirs(UPLOADS_DIR, exist_ok=True)
@@ -160,12 +158,7 @@ async def chat_multimodal_endpoint(
             final_message = f"{final_message}\n\nAnalisi immagine:\n" + "\n".join(analysis_parts)
             
         planning_message = user_message or "Cosa vedi in questa immagine?"
-        stored_user_content = build_image_message_content(
-            user_message,
-            extracted_text,
-            visual_description,
-            image_url,
-        )
+        stored_user_content = build_image_message_content(user_message, image_url)
         request = ChatRequestDTO(
             message=final_message, 
             visual_context=visual_context or None, 
@@ -177,8 +170,7 @@ async def chat_multimodal_endpoint(
         )
         response = await answer_chat(request)
         
-        # Set the extracted text so the frontend can display what it heard/read
-        response.extracted_text = extracted_text or visual_description or None
+        response.extracted_text = None
         return response
     else:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
@@ -186,8 +178,6 @@ async def chat_multimodal_endpoint(
 
 def build_image_message_content(
     user_message: str,
-    extracted_text: str,
-    visual_description: str,
     image_url: str | None = None,
 ) -> str:
     parts = []
@@ -198,10 +188,5 @@ def build_image_message_content(
         parts.append(user_message)
     else:
         parts.append("Immagine inviata dall'utente.")
-
-    if visual_description:
-        parts.append(f"Descrizione immagine: {visual_description}")
-    if extracted_text:
-        parts.append(f"Testo estratto dall'immagine: {extracted_text}")
 
     return "\n".join(parts)

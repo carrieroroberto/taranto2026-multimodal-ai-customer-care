@@ -213,6 +213,11 @@ export function ChatComposer({
     setMessage("");
   }
 
+  function handleCancelEscalationClick() {
+    setMessage("");
+    onCancelEscalation?.();
+  }
+
   function handleKeyDown(event) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -413,7 +418,7 @@ export function ChatComposer({
           <button
             type="button"
             className="composer-action-button"
-            onClick={onCancelEscalation}
+            onClick={handleCancelEscalationClick}
             title={t.ticketCancel}
             aria-label={t.ticketCancel}
           >

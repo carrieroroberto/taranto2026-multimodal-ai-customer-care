@@ -29,8 +29,11 @@ class ChatResponseDTO(BaseModel):
     user_message_id: str | None = None
     bot_message_id: str | None = None
     message_id: str | None = None  # Alias for bot_message_id as per latest request
+    user_created_at: str | None = None
+    bot_created_at: str | None = None
     answer: str
     language: str | None = None  # NEW: The language used for the response
+    language_detected: bool = True
     extracted_text: str | None = None
     sources: list[SourceDTO] = Field(default_factory=list)
     maps: str | None = None
