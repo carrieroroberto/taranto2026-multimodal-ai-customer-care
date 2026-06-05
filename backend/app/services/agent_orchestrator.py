@@ -50,6 +50,38 @@ def robust_normalize(text: str) -> str:
     text = text.lower()
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
+SOURCE_STOP_TERMS = {
+    "2026", "ai", "al", "alla", "allo", "anche", "assistenza", "assistente",
+    "bot", "chat", "ciao", "come", "con", "dato", "dei", "del", "della",
+    "delle", "di", "domanda", "essere", "giochi", "gli", "help", "il", "in",
+    "informazione", "informazioni", "io", "la", "le", "mediterraneo",
+    "mediterranei", "momento", "non", "oggi", "per", "posso", "preciso",
+    "questa", "questo", "risponderti", "sicurezza", "sono", "su", "tara",
+    "taranto", "ti", "tuo", "ufficiale", "un", "una",
+}
+
+SERVICE_ANSWER_PATTERNS = (
+    "ciao sono tara",
+    "come posso aiutarti",
+    "come posso aiutarla",
+    "how can i help",
+    "how may i help",
+    "como puedo ayudarte",
+    "comment puis je vous aider",
+    "scrivi la tua email",
+    "inserisci la tua email",
+    "write your email",
+    "enter your email",
+    "verrai ricontattato",
+    "human operator",
+    "operatore umano",
+    "al momento non ho un dato abbastanza preciso",
+    "i don t have enough precise information",
+    "i don't have enough precise information",
+    "no tengo informacion suficientemente precisa",
+    "je n ai pas d informations suffisamment precises",
+)
+
 async def planning_node(state: AgentState) -> Dict[str, Any]:
     logger.info("Node: planning")
     message = state["message"]
@@ -131,10 +163,14 @@ async def postprocessing_node(state: AgentState) -> Dict[str, Any]:
     if not answer:
         return {"sources": [], "maps": None}
 
+    if should_suppress_sources(answer):
+        return {"sources": [], "maps": None}
+
     norm_ans = robust_normalize(answer)
+    source_contexts = contexts_supporting_answer(answer, contexts, plan)
     initial_sources = []
     seen_urls = set()
-    for ctx in contexts:
+    for ctx in source_contexts:
         if ctx.source_url and ctx.source_url not in seen_urls:
             initial_sources.append(SourceDTO(
                 title=ctx.title or ctx.item_id, 
@@ -155,7 +191,7 @@ async def postprocessing_node(state: AgentState) -> Dict[str, Any]:
     
     mentioned_maps = []
     
-    for c in contexts:
+    for c in source_contexts:
         if not c.maps_url:
             continue
         
@@ -223,9 +259,101 @@ async def postprocessing_node(state: AgentState) -> Dict[str, Any]:
 
     return {
         "answer": final_answer,
-        "sources": sources[:4],
+        "sources": sources[:3],
         "maps": maps
     }
+
+
+def should_suppress_sources(answer: str) -> bool:
+    normalized = robust_normalize(answer)
+    if not normalized:
+        return True
+
+    if any(pattern in normalized for pattern in SERVICE_ANSWER_PATTERNS):
+        return True
+
+    tokens = normalized.split()
+    meaningful = [token for token in tokens if token not in SOURCE_STOP_TERMS and len(token) >= 4]
+    if len(tokens) <= 16 and len(meaningful) <= 2 and any(token in {"ciao", "salve", "hello", "hola", "bonjour"} for token in tokens):
+        return True
+
+    return False
+
+
+def contexts_supporting_answer(
+    answer: str,
+    contexts: List[RetrievedContext],
+    plan: Optional[QueryPlan],
+) -> List[RetrievedContext]:
+    terms = source_match_terms(answer)
+    if not terms:
+        return []
+
+    normalized_answer = robust_normalize(answer)
+    answer_numbers = set(re.findall(r"\b\d{1,4}\b", answer))
+    supported: List[RetrievedContext] = []
+
+    for ctx in contexts:
+        if not ctx.source_url:
+            continue
+        if source_type_inappropriate(ctx, normalized_answer, plan):
+            continue
+
+        context_text = robust_normalize(
+            " ".join(
+                str(part or "")
+                for part in [ctx.item_id, ctx.title, ctx.item_type, ctx.address, ctx.document]
+            )
+        )
+        if not context_text:
+            continue
+
+        term_hits = sum(1 for term in terms if term in context_text)
+        number_hit = bool(answer_numbers and any(number in context_text for number in answer_numbers))
+        title_hit = bool(ctx.title and robust_normalize(ctx.title) in normalized_answer)
+
+        support_score = term_hits + (2 if number_hit else 0) + (2 if title_hit else 0)
+        if support_score >= 2:
+            supported.append(ctx)
+
+    return supported
+
+
+def source_match_terms(answer: str) -> set[str]:
+    normalized = robust_normalize(answer)
+    terms: set[str] = set()
+    for token in normalized.split():
+        if token in SOURCE_STOP_TERMS:
+            continue
+        if len(token) < 4:
+            continue
+        terms.add(token)
+    return terms
+
+
+def source_type_inappropriate(
+    ctx: RetrievedContext,
+    normalized_answer: str,
+    plan: Optional[QueryPlan],
+) -> bool:
+    item_type = robust_normalize(ctx.item_type or "")
+    title = robust_normalize(ctx.title or "")
+    query_text = robust_normalize(getattr(plan, "original_query", "") if plan else "")
+    combined_request = f"{query_text} {normalized_answer}"
+
+    if "contact" in item_type or "contatt" in item_type or "contact" in title or "contatt" in title:
+        return not any(
+            term in combined_request
+            for term in ("contatto", "contatti", "email", "telefono", "segreteria", "supporto", "operatore", "contact", "phone")
+        )
+
+    if "historical_results_page" in item_type or "risultati storici" in item_type:
+        return not any(
+            term in combined_request
+            for term in ("storia", "storico", "storici", "risultati", "medaglie", "medagliere", "edizione", "pescara", "oran", "mersin", "athens", "casablanca")
+        )
+
+    return False
 
 def create_orchestrator():
     workflow = StateGraph(AgentState)

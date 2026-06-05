@@ -138,6 +138,7 @@ function ChatMessage({
                     className={
                       message.image ? "message-text message-text-under-media" : ""
                     }
+                    emphasizeTicketEmail={shouldEmphasizeTicketEmail(message, isUser)}
                     sources={sources}
                     text={message.text}
                   />
@@ -147,7 +148,10 @@ function ChatMessage({
                       message.image ? "message-text message-text-under-media" : ""
                     }
                   >
-                    {message.text}
+                    <FormattedMessageText
+                      emphasizeTicketEmail={shouldEmphasizeTicketEmail(message, isUser)}
+                      text={message.text}
+                    />
                   </span>
                 ) : null}
               </>
@@ -296,14 +300,72 @@ function WelcomeSuggestions({ disabled, questions, onSuggestionClick }) {
   );
 }
 
-function TextWithInlineSources({ className, sources, text }) {
+function TextWithInlineSources({
+  className,
+  emphasizeTicketEmail = false,
+  sources,
+  text,
+}) {
   return (
     <span className={className ? `${className} message-text-with-sources` : "message-text-with-sources"}>
-      <span>{text}</span>
+      <span>
+        <FormattedMessageText
+          emphasizeTicketEmail={emphasizeTicketEmail}
+          text={text}
+        />
+      </span>
       {"\u00a0"}
       <SourceFavicons sources={sources} />
     </span>
   );
+}
+
+function FormattedMessageText({ emphasizeTicketEmail = false, text }) {
+  if (!emphasizeTicketEmail) {
+    return text;
+  }
+
+  const emailMatch = String(text || "").match(
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+  );
+  if (!emailMatch) {
+    return text;
+  }
+
+  const email = emailMatch[0];
+  const before = text.slice(0, emailMatch.index);
+  const after = text.slice(emailMatch.index + email.length);
+
+  return (
+    <>
+      {before}
+      <strong>{email}</strong>
+      {after}
+    </>
+  );
+}
+
+function shouldEmphasizeTicketEmail(message, isUser) {
+  if (isUser || message.isError || message.isLoading || !message.text) {
+    return false;
+  }
+
+  const text = String(message.text);
+  const normalized = normalizeSourceText(text);
+  const latinSuccessPatterns = [
+    "richiesta inviata con successo",
+    "request sent successfully",
+    "solicitud enviada correctamente",
+    "demande envoyee avec succes",
+  ];
+  const hasLatinSuccessPattern = latinSuccessPatterns.some((pattern) =>
+    normalized.includes(pattern),
+  );
+  const hasArabicSuccessPattern = text.includes(
+    "\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0637\u0644\u0628 \u0628\u0646\u062c\u0627\u062d",
+  );
+
+  return hasLatinSuccessPattern || hasArabicSuccessPattern;
 }
 
 function SourceFavicons({ sources }) {
@@ -356,6 +418,7 @@ function getVisibleSources(message, isUser) {
     message.isError ||
     message.isLoading ||
     message.translationKey ||
+    isServiceAnswerText(message.text) ||
     !Array.isArray(message.sources)
   ) {
     return [];
@@ -378,6 +441,43 @@ function getVisibleSources(message, isUser) {
     }
   }
   return visibleSources;
+}
+
+function isServiceAnswerText(text) {
+  const normalized = normalizeSourceText(text);
+  if (!normalized) {
+    return true;
+  }
+
+  return [
+    "ciao sono tara",
+    "come posso aiutarti",
+    "how can i help",
+    "how may i help",
+    "como puedo ayudarte",
+    "comment puis je vous aider",
+    "scrivi la tua email",
+    "inserisci la tua email",
+    "write your email",
+    "enter your email",
+    "verrai ricontattato",
+    "human operator",
+    "operatore umano",
+    "al momento non ho un dato abbastanza preciso",
+    "i don t have enough precise information",
+    "i don t have enough precise information",
+    "no tengo informacion suficientemente precisa",
+    "je n ai pas d informations suffisamment precises",
+  ].some((pattern) => normalized.includes(pattern));
+}
+
+function normalizeSourceText(text) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function canonicalSourceKey(url) {
