@@ -31,7 +31,7 @@ DONE:
 
 
 TO DO:
-- quando passo da arabo a un altra lingua poi non viene mantenuto il distacco dai pulsanti floating all'ultimo messaggio come invece avviene passando da una lingua all'altra (non arabo). solo su mobile. quindi voglio che mi riporti a ogni switch di lingua quanto piu giu possibile nella message area, nello stesso modo che succede quando appare un nuovo messaggio nella chat.
+- quando passo da arabo a un altra lingua poi non viene mantenuto il distacco dai pulsanti floating all'ultimo messaggio come invece avviene passando da una lingua all'altra (non arabo). solo su mobile. quindi voglio che mi riporti a ogni switch di lingua quanto piu giu possibile nella message area, nello stesso modo che succede quando appare un nuovo messaggio nella chat (da valutare)
 
 - verifiche ridondanze in tutta la codebase o elementi non utilizzati o non rilevanti, mantenendo il funzionamento e lo stile.
 
