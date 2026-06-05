@@ -19,7 +19,7 @@ class PersistedMessageDTO(BaseModel):
     conversation_id: str
     role: str
     type: str = "text"
-    content: str
+    content: str | None = None
     media_url: str | None = None
     sources: list[SourceDTO] | None = None
     satisfaction: bool | None = None

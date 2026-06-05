@@ -42,7 +42,7 @@ VALID_MESSAGE_TYPES = {"text", "image", "audio"}
 def save_message(
     session_id: str,
     role: str,
-    content: str,
+    content: str | None,
     message_type: str = "text",
     media_url: str | None = None,
     sources: list[Any] | None = None,
@@ -51,6 +51,7 @@ def save_message(
         raise ValueError("role must be 'user' or 'bot'.")
     if message_type not in VALID_MESSAGE_TYPES:
         message_type = "text"
+    stored_content = normalize_message_content(role, content, message_type)
 
     resolved_id = conversation_uuid(session_id)
     with connect() as conn:
@@ -73,7 +74,7 @@ def save_message(
                     resolved_id,
                     role,
                     message_type,
-                    content,
+                    stored_content,
                     normalize_media_url(media_url),
                     normalize_sources_value(role, sources),
                 ),
@@ -85,7 +86,7 @@ def save_message(
 
 def save_user_message(
     session_id: str,
-    content: str,
+    content: str | None,
     message_type: str = "text",
     media_url: str | None = None,
 ) -> dict[str, Any]:
@@ -154,6 +155,8 @@ def get_session_history(session_id: str, limit: int = 5) -> list[dict[str, Any]]
         SELECT role, content
         FROM messages
         WHERE conversation_id = %s
+          AND content IS NOT NULL
+          AND TRIM(content) <> ''
         ORDER BY created_at DESC
         LIMIT %s
         """,
@@ -499,6 +502,14 @@ def normalize_sources_value(role: str, sources: list[Any] | None) -> Jsonb | Non
     if role == "user":
         return None
     return Jsonb(normalize_sources_for_storage(sources))
+
+
+def normalize_message_content(role: str, content: str | None, message_type: str) -> str | None:
+    if role == "user" and message_type in {"image", "audio"}:
+        return None
+
+    text = str(content or "").strip()
+    return text or None
 
 
 def normalize_media_url(value: Any) -> str | None:

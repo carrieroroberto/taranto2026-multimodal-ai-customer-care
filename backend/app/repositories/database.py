@@ -34,7 +34,7 @@ SCHEMA_STATEMENTS = (
         conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
         role TEXT NOT NULL CHECK (role IN ('user', 'bot')),
         type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio')),
-        content TEXT NOT NULL,
+        content TEXT DEFAULT NULL,
         media_url TEXT DEFAULT NULL,
         sources JSONB DEFAULT NULL,
         satisfaction BOOLEAN DEFAULT NULL,
@@ -44,6 +44,7 @@ SCHEMA_STATEMENTS = (
     "ALTER TABLE operators ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE conversations ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE messages ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
+    "ALTER TABLE messages ALTER COLUMN content DROP NOT NULL;",
     """
     ALTER TABLE messages
     ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'text';
@@ -72,6 +73,12 @@ SCHEMA_STATEMENTS = (
     WHERE media_url IS NULL
       AND type = 'audio'
       AND content LIKE '[AUDIO_URL:%';
+    """,
+    """
+    UPDATE messages
+    SET content = NULL
+    WHERE type IN ('image', 'audio')
+      AND content IS NOT NULL;
     """,
     """
     UPDATE messages

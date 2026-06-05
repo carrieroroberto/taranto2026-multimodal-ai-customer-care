@@ -168,7 +168,7 @@ async def extract_text_from_image(file: UploadFile) -> str:
         logger.error(f"OCR error: {e}")
         return ""
 
-async def describe_image_vision(file: UploadFile) -> str:
+async def describe_image_vision(file: UploadFile, user_focus: str | None = None) -> str:
     """Describes an image using the configured vision provider."""
     try:
         logger.info(f"Analyzing image visually: {file.filename}")
@@ -186,20 +186,34 @@ async def describe_image_vision(file: UploadFile) -> str:
 
         provider = normalized_multimodal_provider()
         if provider in {"groq", "auto"} and groq_api_key():
-            description = await describe_image_groq(optimized_base64)
+            description = await describe_image_groq(optimized_base64, user_focus)
             if description or provider == "groq":
                 return description
 
         if provider == "groq":
             return ""
 
-        return await describe_image_ollama(optimized_base64)
+        return await describe_image_ollama(optimized_base64, user_focus)
     except Exception as e:
         logger.error(f"Vision error detail: {str(e)}")
         return ""
 
 
-async def describe_image_groq(optimized_base64: str) -> str:
+async def describe_image_groq(optimized_base64: str, user_focus: str | None = None) -> str:
+    focus_text = (user_focus or "").strip()
+    prompt = (
+        "Analyze the image as the primary source of information. "
+        "Describe only what is visible and relevant to answer the user's focus. "
+        "If you see a mascot, torch, sport symbols, venue, ticket, calendar, map, "
+        "or text related to Taranto 2026, mention it explicitly. "
+        "Do not invent names, dates, prices or links."
+    )
+    if focus_text:
+        prompt += (
+            "\nThe user's text is a focus about the image, not a separate request: "
+            f"{focus_text}"
+        )
+
     data = {
         "model": settings.groq_vision_model,
         "messages": [
@@ -208,12 +222,7 @@ async def describe_image_groq(optimized_base64: str) -> str:
                 "content": [
                     {
                         "type": "text",
-                        "text": (
-                            "Describe briefly what is visible in this image. "
-                            "If you see a mascot, a torch, sport symbols, a venue, a ticket, "
-                            "a calendar, or text related to Taranto 2026, mention it explicitly. "
-                            "Do not invent names, dates, prices or links."
-                        ),
+                        "text": prompt,
                     },
                     {
                         "type": "image_url",
@@ -255,14 +264,24 @@ async def describe_image_groq(optimized_base64: str) -> str:
         return ""
 
 
-async def describe_image_ollama(optimized_base64: str) -> str:
+async def describe_image_ollama(optimized_base64: str, user_focus: str | None = None) -> str:
     try:
         ollama_url = settings.ollama_base_url.rstrip("/") + "/api/generate"
         logger.info(f"Sending vision request to: {ollama_url}")
+        focus_text = (user_focus or "").strip()
+        prompt = (
+            "Analyze the image as the main input. Describe briefly what is visible "
+            "and focus on details needed to answer the user's text. If you see a "
+            "mascot, torch, sport symbols, venue, ticket, calendar, map, or "
+            "Taranto 2026 text, mention it explicitly. Do not invent names, dates, "
+            "prices or links."
+        )
+        if focus_text:
+            prompt += f"\nUser focus about the image: {focus_text}"
         
         data = {
             "model": settings.vision_model,
-            "prompt": "What do you see in this image? Describe it briefly. If you see a mascot, a torch, or three interlocking rings, mention them explicitly.",
+            "prompt": prompt,
             "images": [optimized_base64],
             "stream": False
         }

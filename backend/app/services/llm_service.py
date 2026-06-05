@@ -343,6 +343,7 @@ async def build_answer(
     should_escalate: bool,
     reason: str | None,
     history: list[dict[Any]] | None = None,
+    visual_context: str | None = None,
 ) -> str:
     if explicit_operator_requested(message) or reason == "human_operator_requested":
         return human_operator_answer(plan.response_language)
@@ -360,7 +361,7 @@ async def build_answer(
     if plan.domain == "ticketing" and set(plan.domains).issubset({"ticketing", "general"}):
         answer = ticketing_guardrail_answer(plan.response_language)
     else:
-        prompt = build_user_prompt(message, plan, contexts, history)
+        prompt = build_user_prompt(message, plan, contexts, history, visual_context)
         answer = await generate_grounded_answer(prompt, plan.response_language)
 
     return clean_answer_text(answer)
@@ -491,12 +492,23 @@ def build_user_prompt(
     plan: QueryPlan,
     contexts: list[RetrievedContext],
     history: list[dict[str, Any]] | None = None,
+    visual_context: str | None = None,
 ) -> str:
     context_text = "\n\n".join([f"FONTE: {c.document}" for c in contexts])
+    visual_block = ""
+    if visual_context:
+        visual_block = f"""
+    CONTESTO VISIVO FORNITO DALL'IMMAGINE:
+    {visual_context.strip()}
+
+    REGOLA MULTIMODALE:
+    L'immagine e' il riferimento principale della richiesta. Interpreta il testo dell'utente come focus o domanda sull'immagine, non come richiesta separata.
+    """
     
     prompt = f"""
     CONTESTO DA USARE:
     {context_text}
+    {visual_block}
     
     DOMANDA: {message}
     

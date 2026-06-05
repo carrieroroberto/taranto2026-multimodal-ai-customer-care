@@ -102,7 +102,7 @@ async def planning_node(state: AgentState) -> Dict[str, Any]:
         from backend.app.services.rag_service import PlannedRetrievalQuery
         import dataclasses
         visual_context_it = await translate_text(visual_context, "it")
-        anchored_query = f"{visual_context_it} Giochi del Mediterraneo Taranto 2026 mascotte logo emblema"
+        anchored_query = f"{visual_context_it} Giochi del Mediterraneo Taranto 2026"
         new_queries = list(plan.retrieval_queries)
         new_queries.append(PlannedRetrievalQuery(query=anchored_query, domain="general", weight=1.5))
         new_queries.append(PlannedRetrievalQuery(query=visual_context_it, domain="general", weight=1.0))
@@ -142,7 +142,15 @@ async def generation_node(state: AgentState) -> Dict[str, Any]:
             "escalation_reason": "no_context"
         }
     
-    answer = await build_answer(message, plan, contexts, False, None, state["history"])
+    answer = await build_answer(
+        message,
+        plan,
+        contexts,
+        False,
+        None,
+        state["history"],
+        state.get("visual_context"),
+    )
     if is_refusal_answer(answer) or answer_repeats_user_text(answer, message):
         should_escalate = False
         reason = "immediate_refusal"

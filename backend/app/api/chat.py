@@ -68,15 +68,13 @@ async def chat_audio_endpoint(
     if not extracted_text:
         extracted_text = "[AUDIO_INCOMPRENSIBILE]"
 
-    stored_user_content = "Audio inviato dall'utente."
-
     response = await answer_chat(
         ChatRequestDTO(
             message=extracted_text,
             session_id=session_id,
             language=language,
             message_type="audio",
-            stored_user_content=stored_user_content,
+            stored_user_content=None,
             media_url=audio_url,
         )
     )
@@ -121,7 +119,7 @@ async def chat_multimodal_endpoint(
                 session_id=session_id,
                 language=language,
                 message_type="audio",
-                stored_user_content="Audio inviato dall'utente.",
+                stored_user_content=None,
                 media_url=audio_url,
             )
         )
@@ -148,28 +146,15 @@ async def chat_multimodal_endpoint(
             visual_description = ""
         else:
             extracted_text = await extract_text_from_image(file)
-            visual_description = await describe_image_vision(file)
+            visual_description = await describe_image_vision(file, user_message)
         
-        # Build pure visual context for semantic search (no chatty text)
-        visual_context = ""
-        if visual_description:
-            visual_context = visual_description.strip()
-        if extracted_text:
-            visual_context = f"{visual_context} {extracted_text}".strip()
-
-        # Build the final message for the LLM to ANSWER
-        final_message = user_message or "Cosa vedi in questa immagine?"
-        analysis_parts = []
-        if visual_description:
-            analysis_parts.append(f"Descrizione visiva: {visual_description}")
-        if extracted_text:
-            analysis_parts.append(f"Testo letto: {extracted_text}")
-            
-        if analysis_parts:
-            final_message = f"{final_message}\n\nAnalisi immagine:\n" + "\n".join(analysis_parts)
-            
-        planning_message = user_message or "Cosa vedi in questa immagine?"
-        stored_user_content = build_image_message_content(user_message, image_url)
+        visual_context = build_visual_context(visual_description, extracted_text)
+        final_message = build_image_internal_message(
+            user_message,
+            visual_description,
+            extracted_text,
+        )
+        planning_message = user_message or "Analizza l'immagine inviata."
         request = ChatRequestDTO(
             message=final_message, 
             visual_context=visual_context or None, 
@@ -177,7 +162,7 @@ async def chat_multimodal_endpoint(
             session_id=session_id,
             language=language,
             message_type="image",
-            stored_user_content=stored_user_content,
+            stored_user_content=None,
             media_url=image_url,
         )
         response = await answer_chat(request)
@@ -188,17 +173,30 @@ async def chat_multimodal_endpoint(
         raise HTTPException(status_code=400, detail="Unsupported file type.")
 
 
-def build_image_message_content(
-    user_message: str,
-    image_url: str | None = None,
-) -> str:
+def build_visual_context(visual_description: str, extracted_text: str) -> str:
     parts = []
-    if image_url:
-        parts.append(f"[IMAGE_URL:{image_url}]")
+    if visual_description:
+        parts.append(f"Descrizione visiva dell'immagine: {visual_description.strip()}")
+    if extracted_text:
+        parts.append(f"Testo leggibile nell'immagine: {extracted_text.strip()}")
+    return "\n".join(parts).strip()
 
-    if user_message:
-        parts.append(user_message)
-    else:
-        parts.append("Immagine inviata dall'utente.")
 
-    return "\n".join(parts)
+def build_image_internal_message(
+    user_message: str,
+    visual_description: str,
+    extracted_text: str,
+) -> str:
+    focus = user_message or "Analizza l'immagine inviata e rispondi in base a cio che si vede."
+    visual_context = build_visual_context(visual_description, extracted_text)
+    if not visual_context:
+        visual_context = "Nessuna descrizione visiva affidabile disponibile."
+
+    return (
+        "Richiesta multimodale con immagine.\n"
+        "L'immagine e' l'elemento principale da interpretare. "
+        "Il testo dell'utente serve solo come focus o domanda riferita all'immagine, "
+        "non come richiesta separata.\n\n"
+        f"DATI DELL'IMMAGINE:\n{visual_context}\n\n"
+        f"FOCUS TESTUALE DELL'UTENTE:\n{focus}"
+    )
