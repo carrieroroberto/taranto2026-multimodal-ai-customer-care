@@ -52,6 +52,8 @@ export function ChatPage() {
   const abortControllerRef = useRef(null);
   const scrollAnimationFrameRef = useRef(null);
   const scrollScheduleFrameRef = useRef(null);
+  const localeScrollTimeoutRef = useRef(null);
+  const previousLocaleRef = useRef(locale);
   
   const [shouldScroll, setShouldScroll] = useState(true);
   
@@ -123,6 +125,21 @@ export function ChatPage() {
     document.documentElement.lang = localeConfig.htmlLang;
     document.documentElement.dir = localeConfig.dir;
     document.title = t.pageTitle;
+
+    const didSwitchLocale = previousLocaleRef.current !== locale;
+    previousLocaleRef.current = locale;
+    if (didSwitchLocale && isMobileViewport()) {
+      setShouldScroll(true);
+      scheduleScrollMessagesToBottom("smooth");
+
+      if (localeScrollTimeoutRef.current) {
+        window.clearTimeout(localeScrollTimeoutRef.current);
+      }
+      localeScrollTimeoutRef.current = window.setTimeout(() => {
+        localeScrollTimeoutRef.current = null;
+        scheduleScrollMessagesToBottom("smooth");
+      }, 140);
+    }
   }, [locale, localeConfig.dir, localeConfig.htmlLang, t.pageTitle]);
 
   useEffect(() => {
@@ -138,6 +155,9 @@ export function ChatPage() {
       }
       if (scrollScheduleFrameRef.current) {
         window.cancelAnimationFrame(scrollScheduleFrameRef.current);
+      }
+      if (localeScrollTimeoutRef.current) {
+        window.clearTimeout(localeScrollTimeoutRef.current);
       }
     };
   }, []);
@@ -646,6 +666,13 @@ export function ChatPage() {
 function getInitialTheme() {
   const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
   return saved || (window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light");
+}
+
+function isMobileViewport() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.matchMedia?.("(max-width: 767px)")?.matches ?? false;
 }
 
 function wait(ms) {
