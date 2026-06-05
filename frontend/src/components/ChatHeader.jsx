@@ -68,8 +68,10 @@ function GamesCountdown({ t }) {
 function CountdownUnit({ value, label }) {
   return (
     <span className="countdown-unit">
-      <strong>{String(value).padStart(2, "0")}</strong>
-      <span>{label}</span>
+      <span className="countdown-unit-inner">
+        <strong>{String(value).padStart(2, "0")}</strong>
+        <span>{label}</span>
+      </span>
     </span>
   );
 }
