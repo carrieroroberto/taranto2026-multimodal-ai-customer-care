@@ -5,9 +5,9 @@ DONE:
 
 - non devono essere selezionabili domande preimpostate e feedback messaggi quando si è in attesa che venga inserita email utente per supporto (come infatti sono disabilitati mentre il bot ragiona/scrive)
 
-- email inviata come messaggio utente normale che compare in chat e bot fa animazione di ragionamento/scrittura prima di scrivere l'esito di successo dell'avvenuta richiesta o fallimento ticket FATTO
+- email inviata come messaggio utente normale che compare in chat e bot fa animazione di ragionamento/scrittura prima di scrivere l'esito di successo dell'avvenuta richiesta o fallimento ticket
 
-- Tutte le richieste devono essere tradotte in italiano prima della ricerca nella kb, mentre tutte le risposte del bot devono essere tradotte nella lingua corrente selezionata nella UI. poi non voglio switch automatico della lingua rilevata del messaggio in modo harcodato con dizionario di parole frequenti. voglio un rilevamento robusto basato su llm che identifichi la lingua tra quelle disponbili nel chatbot e aggiorn di consegunza la UI e serva per la traduzione del messaggio per la dashboard operatore FATTO
+- Tutte le richieste devono essere tradotte in italiano prima della ricerca nella kb, mentre tutte le risposte del bot devono essere tradotte nella lingua corrente selezionata nella UI. poi non voglio switch automatico della lingua rilevata del messaggio in modo harcodato con dizionario di parole frequenti. voglio un rilevamento robusto basato su llm che identifichi la lingua tra quelle disponbili nel chatbot e aggiorn di consegunza la UI e serva per la traduzione del messaggio per la dashboard operatore
 
 - non voglio salvare original_message e translated_message perché operatore puo visualizzare tutta la chat e tradurla premendo su traduci conversazione in un solo colpo quando verrà sviluppata la dashboard operatore. poi a che serve nella tabella ticket il feedback_messages_id? si può rimuovere o è vitale per la dashboard operatore?
 
@@ -23,11 +23,13 @@ DONE:
 
 - immagini e audio non devono aggiungere trascrizioni e estrazioni di testo al messaggio in chiaro, le info estratte devono essere usate solo under the hood, non mostrare trascrizioni/estrazioni di nulla nei messaggi.
 
-
-TO DO:
 - voglio che anche messaggi precedenti possano aprire escalation anche se non sono ultimo messaggio inviato. semplicemente invece di avere feedbakc_message_id nella tabella tickets viene salvato escalated_message_id ovvero id della tabella messages relativo al messaggio su cui è stato richiesto il feedback. unico vincolo mentre è aperta una richiesta di escalation non posso premere altri feedback negativi e duplicarle escalation, uno per volta ma anche in maniera retroattiva.
 
-- text to speech lato frontend su tutti i dispositivi quando l'utente invia un messaggio vocale la risposta, oltre a essere visualizzata in maniera testuale come ogni messaggio deve essere anche letta in automatico nella stessa lingua impostata nella UI, solo una volta quando la risposta viene ricevuta dal bot e compare nella chat.
+
+TO DO:
+- fai in modo che un utente possa togliere il feedback schiacciando nuovamente su di esso, in modo che non per forza poi è obbligato a switchare tra i due, ma potendolo anche rimuoverlo se non è interessato a fornirne uno o lo fornisce per sbaglio e vuole toglierlo.
+
+- text to speech lato frontend su tutti i dispositivi quando l'utente invia un messaggio vocale la risposta, oltre a essere visualizzata in maniera testuale come ogni messaggio deve essere anche letta in automatico (appena il messaggio viene visualizzato), nella stessa lingua del messaggio (o se non disponibile nella lingua impostata nella UI), una sola volta quando la risposta viene ricevuta dal bot e compare nella chat (non anche nei refresh o nelle aperture successive della sessione).
 
 - quando passo da arabo a un altra lingua poi non viene mantenuto il distacco dai pulsanti floating all'ultimo messaggio come invece avviene passando da una lingua all'altra (non arabo). solo su mobile. quindi voglio che mi riporti a ogni switch di lingua quanto piu giu possibile nella message area, nello stesso modo che succede quando appare un nuovo messaggio nella chat.
 
@@ -35,8 +37,10 @@ TO DO:
 
 - rivedere grafiche, favorendo introduzioni loghi e mascotte
 
-- dashboard operatore
-
 - verificare correttezza e completezza dati generati/salvati nel database (se sono coerenti con quello che succede)
 
-- capire rotta kpis
+- aggiornare README
+
+- capire come trattare kpis e rotta/logica associata, per ottenere in un solo colpo tutte le metriche necessarie formattate in formato consono e automatizzato
+
+- creazione dashboard operatore

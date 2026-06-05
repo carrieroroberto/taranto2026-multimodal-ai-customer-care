@@ -110,7 +110,7 @@ export async function updateMessageFeedback({ messageId, satisfaction }) {
 
 export async function sendTicket({
   conversationId,
-  feedbackMessageId,
+  escalatedMessageId,
   userEmail,
   language,
   signal,
@@ -122,7 +122,7 @@ export async function sendTicket({
     },
     body: JSON.stringify({
       conversation_id: conversationId,
-      feedback_message_id: feedbackMessageId || null,
+      escalated_message_id: escalatedMessageId || null,
       user_email: userEmail,
       language,
     }),

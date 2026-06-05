@@ -28,12 +28,15 @@ async def post_ticket(ticket: TicketRequestDTO):
     ensure_conversation(conversation_id=ticket.conversation_id)
 
     # Generate triage
-    triage = await generate_ticket_triage(ticket.conversation_id)
+    triage = await generate_ticket_triage(
+        ticket.conversation_id,
+        escalated_message_id=ticket.escalated_message_id,
+    )
     
     # Combine data
     ticket_data = {
         "conversation_id": ticket.conversation_id,
-        "feedback_message_id": ticket.feedback_message_id,
+        "escalated_message_id": ticket.escalated_message_id,
         "user_email": ticket.user_email,
         "domain": triage["domain"],
         "priority": triage["priority"],

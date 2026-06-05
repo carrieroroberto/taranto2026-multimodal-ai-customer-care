@@ -16,7 +16,10 @@ from backend.app.services.llm_service import generate_conversation_summary
 logger = logging.getLogger(__name__)
 
 
-async def generate_ticket_triage(conversation_id: str) -> dict[str, Any]:
+async def generate_ticket_triage(
+    conversation_id: str,
+    escalated_message_id: str | None = None,
+) -> dict[str, Any]:
     messages = get_conversation_messages(conversation_id)
     if not messages:
         return {
@@ -25,9 +28,9 @@ async def generate_ticket_triage(conversation_id: str) -> dict[str, Any]:
             "summary": "Ticket creato senza messaggi.",
         }
 
-    escalation_message = find_escalation_message(messages)
+    escalation_message = find_escalation_message(messages, escalated_message_id)
     content = escalation_message["content"]
-    fallback_summary = build_fallback_conversation_summary(messages)
+    fallback_summary = build_fallback_conversation_summary(messages, escalated_message_id)
 
     # Generate a concise Italian summary focused on the message that opened escalation.
     generated_summary = await generate_conversation_summary(messages, escalation_message)
@@ -282,8 +285,11 @@ def is_usable_summary(summary: str | None) -> bool:
     )
 
 
-def build_fallback_conversation_summary(messages: list[dict[str, Any]]) -> str:
-    escalation_message = find_escalation_message(messages)
+def build_fallback_conversation_summary(
+    messages: list[dict[str, Any]],
+    escalated_message_id: str | None = None,
+) -> str:
+    escalation_message = find_escalation_message(messages, escalated_message_id)
     user_messages = [clean_message_content(str(message.get("content") or "")) for message in messages if message.get("role") == "user"]
     user_messages = [summarize_text(message, 180) for message in user_messages if message.strip()]
     if not user_messages:
@@ -299,9 +305,30 @@ def build_fallback_conversation_summary(messages: list[dict[str, Any]]) -> str:
     )
 
 
-def find_escalation_message(messages: list[dict[str, Any]]) -> dict[str, Any]:
+def find_escalation_message(
+    messages: list[dict[str, Any]],
+    escalated_message_id: str | None = None,
+) -> dict[str, Any]:
     if not messages:
         return {"role": "user", "content": ""}
+
+    if escalated_message_id:
+        for index, message in enumerate(messages):
+            if str(message.get("id")) != str(escalated_message_id):
+                continue
+
+            if message.get("role") == "user":
+                return message
+
+            for previous_index in range(index - 1, -1, -1):
+                previous_message = messages[previous_index]
+                if (
+                    previous_message.get("role") == "user"
+                    and str(previous_message.get("content") or "").strip()
+                ):
+                    return previous_message
+
+            return message
 
     negative_bot_indexes = [
         index

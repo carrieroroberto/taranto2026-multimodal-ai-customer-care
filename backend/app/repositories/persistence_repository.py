@@ -122,7 +122,7 @@ def get_conversation_messages(session_id: str) -> list[dict[str, Any]]:
             EXISTS (
                 SELECT 1
                 FROM tickets t
-                WHERE t.feedback_message_id = m.id
+                WHERE t.escalated_message_id = m.id
             ) AS ticket_opened,
             m.created_at
         FROM messages m
@@ -217,7 +217,7 @@ def save_feedback(feedback_data: dict[str, Any]) -> bool:
                           AND NOT EXISTS (
                               SELECT 1
                               FROM tickets t
-                              WHERE t.feedback_message_id = m.id
+                              WHERE t.escalated_message_id = m.id
                           )
                         ORDER BY m.created_at DESC
                         LIMIT 1
@@ -363,11 +363,11 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
     status = normalize_ticket_status(ticket_data.get("status"))
     priority = normalize_ticket_priority(ticket_data.get("priority"))
     domain = normalize_ticket_domain(ticket_data.get("domain") or ticket_data.get("category"))
-    feedback_message_id = parse_optional_uuid(ticket_data.get("feedback_message_id"))
+    escalated_message_id = parse_optional_uuid(ticket_data.get("escalated_message_id"))
 
     with connect() as conn:
         with conn.cursor() as cursor:
-            if feedback_message_id:
+            if escalated_message_id:
                 cursor.execute(
                     """
                     SELECT id
@@ -376,10 +376,10 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
                       AND conversation_id = %s
                       AND role = 'bot'
                     """,
-                    (feedback_message_id, conversation_id),
+                    (escalated_message_id, conversation_id),
                 )
                 if not cursor.fetchone():
-                    raise ValueError("feedback_message_id must reference a bot message in the conversation.")
+                    raise ValueError("escalated_message_id must reference a bot message in the conversation.")
 
             cursor.execute(
                 """
@@ -393,7 +393,7 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
                 """
                 INSERT INTO tickets (
                     conversation_id,
-                    feedback_message_id,
+                    escalated_message_id,
                     status,
                     priority,
                     domain,
@@ -401,12 +401,12 @@ def save_ticket(ticket_data: dict[str, Any]) -> dict[str, Any]:
                     summary
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, conversation_id, feedback_message_id, status, priority, domain, user_email,
+                RETURNING id, conversation_id, escalated_message_id, status, priority, domain, user_email,
                     summary, created_at
                 """,
                 (
                     conversation_id,
-                    feedback_message_id,
+                    escalated_message_id,
                     status,
                     priority,
                     domain,
@@ -449,7 +449,7 @@ def get_kpi_summary() -> dict[str, Any]:
 
 
 def stringify_ids(row: dict[str, Any]) -> dict[str, Any]:
-    for key in ("id", "conversation_id", "feedback_message_id"):
+    for key in ("id", "conversation_id", "escalated_message_id"):
         if key in row and row[key] is not None:
             row[key] = str(row[key])
     return row
@@ -566,7 +566,7 @@ def parse_optional_uuid(value: Any) -> uuid.UUID | None:
     try:
         return uuid.UUID(str(value))
     except ValueError as exc:
-        raise ValueError("feedback_message_id must be a valid UUID.") from exc
+        raise ValueError("escalated_message_id must be a valid UUID.") from exc
 
 
 def is_feedback_locked(cursor: Any, message_id: uuid.UUID) -> bool:
@@ -574,7 +574,7 @@ def is_feedback_locked(cursor: Any, message_id: uuid.UUID) -> bool:
         """
         SELECT 1
         FROM tickets
-        WHERE feedback_message_id = %s
+        WHERE escalated_message_id = %s
         LIMIT 1
         """,
         (message_id,),

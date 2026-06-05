@@ -32,7 +32,7 @@ class TicketRequestDTO(BaseModel):
     conversation_id: str
     user_email: str
     language: str | None = None
-    feedback_message_id: str | None = None
+    escalated_message_id: str | None = None
     session_id: str | None = None
     category: TicketCategory | None = None
     domain: str | None = None

@@ -93,7 +93,7 @@ SCHEMA_STATEMENTS = (
     CREATE TABLE IF NOT EXISTS tickets (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-        feedback_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+        escalated_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
         status TEXT NOT NULL DEFAULT 'aperto',
         priority TEXT,
         domain TEXT,
@@ -106,10 +106,22 @@ SCHEMA_STATEMENTS = (
     "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE tickets ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE tickets ALTER COLUMN updated_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
-    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS feedback_message_id UUID REFERENCES messages(id) ON DELETE SET NULL;",
+    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS escalated_message_id UUID REFERENCES messages(id) ON DELETE SET NULL;",
     """
     DO $$
     BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'tickets'
+              AND column_name = 'feedback_message_id'
+        ) THEN
+            UPDATE tickets
+            SET escalated_message_id = feedback_message_id
+            WHERE escalated_message_id IS NULL
+              AND feedback_message_id IS NOT NULL;
+        END IF;
+
         IF EXISTS (
             SELECT 1
             FROM information_schema.columns
@@ -122,7 +134,7 @@ SCHEMA_STATEMENTS = (
               AND column_name = 'ticket_opened'
         ) THEN
             UPDATE tickets t
-            SET feedback_message_id = (
+            SET escalated_message_id = (
                 SELECT m.id
                 FROM messages m
                 WHERE m.conversation_id = t.conversation_id
@@ -131,12 +143,14 @@ SCHEMA_STATEMENTS = (
                 ORDER BY m.created_at DESC
                 LIMIT 1
             )
-            WHERE t.feedback_message_id IS NULL;
+            WHERE t.escalated_message_id IS NULL;
         END IF;
     END $$;
     """,
     "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
-    "CREATE INDEX IF NOT EXISTS idx_tickets_feedback_message_id ON tickets(feedback_message_id);",
+    "DROP INDEX IF EXISTS idx_tickets_feedback_message_id;",
+    "ALTER TABLE tickets DROP COLUMN IF EXISTS feedback_message_id;",
+    "CREATE INDEX IF NOT EXISTS idx_tickets_escalated_message_id ON tickets(escalated_message_id);",
     "ALTER TABLE messages DROP COLUMN IF EXISTS ticket_opened;",
     "ALTER TABLE tickets DROP COLUMN IF EXISTS ai_summary;",
     "ALTER TABLE tickets DROP COLUMN IF EXISTS original_message;",

@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS tickets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    feedback_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+    escalated_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
     status TEXT NOT NULL DEFAULT 'aperto',
     priority TEXT DEFAULT 'media',
     domain TEXT DEFAULT 'informazioni generali',
@@ -36,4 +36,4 @@ CREATE TABLE IF NOT EXISTS tickets (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_tickets_feedback_message_id ON tickets(feedback_message_id);
+CREATE INDEX IF NOT EXISTS idx_tickets_escalated_message_id ON tickets(escalated_message_id);

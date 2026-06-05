@@ -249,11 +249,11 @@ export function ChatPage() {
 
         const lastBotWithConv = [...messages].reverse().find(m => m.conversationId);
         const conversationId = lastBotWithConv?.conversationId || sessionIdRef.current;
-        const feedbackMessageId = feedbackTarget?.persistedId || null;
+        const escalatedMessageId = feedbackTarget?.persistedId || null;
 
         const ticketResponse = await sendTicket({
           conversationId,
-          feedbackMessageId,
+          escalatedMessageId,
           userEmail: supportEmail,
           language: requestLocale,
           signal: controller.signal,
@@ -487,10 +487,7 @@ export function ChatPage() {
       await sendFeedback({ sessionId: sessionIdRef.current, messageId: mId, satisfied });
       
       // ESCALATION SU FEEDBACK NEGATIVO - Solo se è l'ultimo messaggio bot
-      const assistantMessages = messages.filter(m => m.role === "assistant" && !m.translationKey);
-      const isLatestBotMessage = assistantMessages.length > 0 && assistantMessages[assistantMessages.length - 1].id === message.id;
-
-      if (satisfied === false && isLatestBotMessage) {
+      if (satisfied === false) {
         setIsEscalating(true);
         const apologyText =
           t.feedbackSupportPrompt ||
