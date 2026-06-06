@@ -13,9 +13,9 @@ export const DEFAULT_LOCALE = "en";
 export const translations = {
   it: {
     appTitle: "TarAI | Giochi del Mediterraneo",
-    appSubtitle: "Assistente AI multimodale per Taranto 2026",
+    appSubtitle: "Assistente AI Multimodale per Taranto 2026",
     pageTitle:
-      "TarAI | Assistente AI multimodale per i Giochi del Mediterraneo 2026 a Taranto",
+      "TarAI | Assistente AI Multimodale per i Giochi del Mediterraneo 2026 a Taranto",
     dateRange: "21 AGO - 3 SET 2026",
     languageLabel: "Lingua",
     botName: "TARA",
@@ -120,9 +120,9 @@ export const translations = {
 
   es: {
     appTitle: "TarAI | Juegos Mediterráneos",
-    appSubtitle: "Asistente de IA multimodal para Taranto 2026",
+    appSubtitle: "Asistente de IA Multimodal para Taranto 2026",
     pageTitle:
-      "TarAI | Asistente de IA multimodal para los Juegos Mediterráneos Taranto 2026",
+      "TarAI | Asistente de IA Multimodal para los Juegos Mediterráneos Taranto 2026",
     dateRange: "21 AGO - 3 SEP 2026",
     languageLabel: "Idioma",
     botName: "TARA",
@@ -174,9 +174,9 @@ export const translations = {
 
   fr: {
     appTitle: "TarAI | Jeux Méditerranéens",
-    appSubtitle: "Assistant IA multimodal pour Taranto 2026",
+    appSubtitle: "Assistant IA Multimodal pour Taranto 2026",
     pageTitle:
-      "TarAI | Assistant IA multimodal pour les Jeux Méditerranéens Taranto 2026",
+      "TarAI | Assistant IA Multimodal pour les Jeux Méditerranéens Taranto 2026",
     dateRange: "21 AOÛT - 3 SEPT. 2026",
     languageLabel: "Langue",
     botName: "TARA",

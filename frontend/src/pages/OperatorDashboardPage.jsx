@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { mainLogoUrl } from "../assets/index.js";
+import { chatBotUrl, chatUserUrl, mainLogoUrl } from "../assets/index.js";
 import { DecorativeBackground } from "../components/DecorativeBackground.jsx";
 import { ThemeToggle } from "../components/ThemeToggle.jsx";
 import {
@@ -19,6 +19,8 @@ import {
 } from "../services/operatorApi.js";
 
 const PRIORITY_ORDER = { alta: 0, media: 1, bassa: 2 };
+const OPERATOR_PAGE_TITLE = "TarAI | Dashboard Operatore";
+const OPERATOR_POLL_INTERVAL_MS = 5000;
 const THEME_STORAGE_KEY = "tarai-theme";
 const TICKET_VIEW_STORAGE_KEY = "tarai-operator-ticket-view";
 const themeLabels = {
@@ -41,7 +43,14 @@ export function OperatorDashboardPage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [isDraftingEmail, setIsDraftingEmail] = useState(false);
   const [theme, setTheme] = useState(() => getInitialTheme());
+  const [unseenUpdateCount, setUnseenUpdateCount] = useState(0);
+  const [unreadTicketIds, setUnreadTicketIds] = useState(() => new Set());
   const [error, setError] = useState("");
+  const knownTicketIdsRef = useRef(new Set());
+  const didInitializeTicketsRef = useRef(false);
+  const selectedConversationMessageIdsRef = useRef(new Set());
+  const didInitializeSelectedConversationRef = useRef(false);
+  const notificationAudioContextRef = useRef(null);
 
   const isAuthenticated = Boolean(token);
 
@@ -49,7 +58,6 @@ export function OperatorDashboardPage() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.lang = "it";
     document.documentElement.dir = "ltr";
-    document.title = "TarAI | Dashboard Operatore";
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
 
     const themeColor = theme === "dark" ? "#061826" : "#06477a";
@@ -59,6 +67,13 @@ export function OperatorDashboardPage() {
         metaElement.setAttribute("content", themeColor);
       });
   }, [theme]);
+
+  useEffect(() => {
+    document.title = unseenUpdateCount > 0
+      ? `(+${unseenUpdateCount}) ${OPERATOR_PAGE_TITLE}`
+      : OPERATOR_PAGE_TITLE;
+    updateOperatorAppBadge(unseenUpdateCount);
+  }, [unseenUpdateCount]);
 
   useEffect(() => {
     if (!token) {
@@ -87,9 +102,46 @@ export function OperatorDashboardPage() {
 
   useEffect(() => {
     if (!token) {
+      return undefined;
+    }
+
+    const activateOperatorNotifications = () => {
+      window.removeEventListener("pointerdown", activateOperatorNotifications);
+      window.removeEventListener("keydown", activateOperatorNotifications);
+      prepareOperatorNotificationSound(notificationAudioContextRef);
+      requestOperatorNotificationPermission();
+    };
+
+    window.addEventListener("pointerdown", activateOperatorNotifications, { once: true });
+    window.addEventListener("keydown", activateOperatorNotifications, { once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", activateOperatorNotifications);
+      window.removeEventListener("keydown", activateOperatorNotifications);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
       return;
     }
+    knownTicketIdsRef.current = new Set();
+    didInitializeTicketsRef.current = false;
     loadTickets();
+  }, [token, statusFilter]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      loadTickets({ silent: true, notify: true });
+    }, OPERATOR_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
   }, [token, statusFilter]);
 
   useEffect(() => {
@@ -116,20 +168,26 @@ export function OperatorDashboardPage() {
     };
   }, []);
 
-  async function loadTickets() {
-    setIsLoadingTickets(true);
-    setError("");
+  async function loadTickets({ silent = false, notify = false } = {}) {
+    if (!silent) {
+      setIsLoadingTickets(true);
+      setError("");
+    }
     try {
       const data = await fetchTickets(token, { status: statusFilter });
-      setTickets(Array.isArray(data) ? data : []);
+      handleTicketRefresh(Array.isArray(data) ? data : [], { notify });
     } catch (loadError) {
       if (isUnauthorized(loadError)) {
         handleSessionExpired();
-      } else {
+      } else if (!silent) {
         setError("Impossibile caricare i ticket.");
+      } else {
+        console.warn("Aggiornamento automatico ticket non riuscito.", loadError);
       }
     } finally {
-      setIsLoadingTickets(false);
+      if (!silent) {
+        setIsLoadingTickets(false);
+      }
     }
   }
 
@@ -147,7 +205,7 @@ export function OperatorDashboardPage() {
       try {
         const detail = await fetchTicketDetail(token, selectedTicketId);
         if (!isCancelled) {
-          setSelectedTicket(detail);
+          handleSelectedTicketRefresh(detail);
         }
       } catch (detailError) {
         if (isUnauthorized(detailError)) {
@@ -165,6 +223,29 @@ export function OperatorDashboardPage() {
     loadDetail();
     return () => {
       isCancelled = true;
+    };
+  }, [token, selectedTicketId]);
+
+  useEffect(() => {
+    if (!token || !selectedTicketId) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const detail = await fetchTicketDetail(token, selectedTicketId);
+        handleSelectedTicketRefresh(detail, { notify: true });
+      } catch (refreshError) {
+        if (isUnauthorized(refreshError)) {
+          handleSessionExpired();
+        } else {
+          console.warn("Aggiornamento automatico conversazione non riuscito.", refreshError);
+        }
+      }
+    }, OPERATOR_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
     };
   }, [token, selectedTicketId]);
 
@@ -189,10 +270,90 @@ export function OperatorDashboardPage() {
     setSession({ token: nextToken, operator: nextOperator });
   }
 
+  function handleTicketRefresh(nextTickets, { notify = false } = {}) {
+    const currentTicketIds = new Set(
+      nextTickets.map((ticket) => String(ticket?.id || "")).filter(Boolean),
+    );
+    const newTickets = nextTickets.filter((ticket) => {
+      const ticketId = String(ticket?.id || "");
+      return ticketId && !knownTicketIdsRef.current.has(ticketId);
+    });
+
+    setTickets(nextTickets);
+    knownTicketIdsRef.current = currentTicketIds;
+
+    if (!didInitializeTicketsRef.current) {
+      didInitializeTicketsRef.current = true;
+      return;
+    }
+
+    if (notify && newTickets.length > 0) {
+      setUnreadTicketIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        newTickets.forEach((ticket) => {
+          if (ticket?.id) {
+            nextIds.add(String(ticket.id));
+          }
+        });
+        return nextIds;
+      });
+      registerOperatorUpdate(newTickets.length, {
+        title: newTickets.length === 1 ? "Nuovo ticket" : "Nuovi ticket",
+        body:
+          newTickets.length === 1
+            ? newTickets[0]?.summary || "E arrivato un nuovo ticket."
+            : `Sono arrivati ${newTickets.length} nuovi ticket.`,
+      });
+    }
+  }
+
+  function handleSelectedTicketRefresh(detail, { notify = false } = {}) {
+    const conversation = Array.isArray(detail?.conversation) ? detail.conversation : [];
+    const currentMessageIds = new Set(
+      conversation.map((message) => String(message?.id || "")).filter(Boolean),
+    );
+    const newUserMessages = conversation.filter((message) => {
+      const messageId = String(message?.id || "");
+      return (
+        messageId &&
+        message?.role === "user" &&
+        !selectedConversationMessageIdsRef.current.has(messageId)
+      );
+    });
+
+    setSelectedTicket(detail);
+    selectedConversationMessageIdsRef.current = currentMessageIds;
+
+    if (!didInitializeSelectedConversationRef.current) {
+      didInitializeSelectedConversationRef.current = true;
+      return;
+    }
+
+    if (notify && newUserMessages.length > 0) {
+      registerOperatorUpdate(newUserMessages.length, {
+        title: newUserMessages.length === 1 ? "Nuovo messaggio utente" : "Nuovi messaggi utente",
+        body:
+          newUserMessages.length === 1
+            ? "E arrivato un nuovo messaggio nella conversazione aperta."
+            : `Sono arrivati ${newUserMessages.length} nuovi messaggi nella conversazione aperta.`,
+      });
+    }
+  }
+
+  function registerOperatorUpdate(count, notification) {
+    if (count <= 0) {
+      return;
+    }
+    setUnseenUpdateCount((currentCount) => currentCount + count);
+    playOperatorNotificationSound(notificationAudioContextRef);
+    showOperatorNotification(notification);
+  }
+
   function handleSessionExpired() {
     clearOperatorSession();
     setSession({ token: null, operator: null });
     setTickets([]);
+    setUnreadTicketIds(new Set());
     closeTicketModal();
     setError("Sessione operatore scaduta. Effettua di nuovo l'accesso.");
   }
@@ -201,6 +362,9 @@ export function OperatorDashboardPage() {
     setError("");
     const session = await loginOperator(credentials);
     updateSession(session.token, session.operator);
+    setUnseenUpdateCount(0);
+    prepareOperatorNotificationSound(notificationAudioContextRef);
+    requestOperatorNotificationPermission();
   }
 
   async function handleLogout() {
@@ -214,6 +378,8 @@ export function OperatorDashboardPage() {
     clearOperatorSession();
     setSession({ token: null, operator: null });
     setTickets([]);
+    setUnreadTicketIds(new Set());
+    setUnseenUpdateCount(0);
     closeTicketModal();
   }
 
@@ -222,6 +388,18 @@ export function OperatorDashboardPage() {
   }
 
   function openTicket(ticketId) {
+    const normalizedTicketId = String(ticketId || "");
+    if (unreadTicketIds.has(normalizedTicketId)) {
+      setUnreadTicketIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.delete(normalizedTicketId);
+        return nextIds;
+      });
+      setUnseenUpdateCount((currentCount) => Math.max(0, currentCount - 1));
+    }
+    selectedConversationMessageIdsRef.current = new Set();
+    didInitializeSelectedConversationRef.current = false;
+    prepareOperatorNotificationSound(notificationAudioContextRef);
     setSelectedTicketId(ticketId);
   }
 
@@ -229,6 +407,8 @@ export function OperatorDashboardPage() {
     setSelectedTicketId(null);
     setSelectedTicket(null);
     setTranslatedMessages(null);
+    selectedConversationMessageIdsRef.current = new Set();
+    didInitializeSelectedConversationRef.current = false;
   }
 
   async function handleToggleStatus() {
@@ -326,6 +506,7 @@ export function OperatorDashboardPage() {
                 sortedTickets.map((ticket) => (
                   <TicketCard
                     key={ticket.id}
+                    isUnread={unreadTicketIds.has(String(ticket.id || ""))}
                     ticket={ticket}
                     onClick={() => openTicket(ticket.id)}
                   />
@@ -627,14 +808,14 @@ function ListIcon() {
   );
 }
 
-function TicketCard({ ticket, onClick }) {
+function TicketCard({ isUnread = false, ticket, onClick }) {
   const priority = normalizedLabel(ticket.priority, "media");
   const status = normalizedLabel(ticket.status, "aperto");
   const domain = ticket.domain || "informazioni generali";
 
   return (
     <button
-      className={`ticket-card ticket-priority-${priority} ticket-status-${status}`}
+      className={`ticket-card ticket-priority-${priority} ticket-status-${status}${isUnread ? " ticket-card-unread" : ""}`}
       type="button"
       onClick={onClick}
     >
@@ -801,15 +982,33 @@ function OperatorConversationMessage({ message }) {
         : "";
 
   return (
-    <article className={isBot ? "operator-message operator-message-bot" : "operator-message operator-message-user"}>
-      <span>{isBot ? "Bot" : "Utente"} - {formatDate(message.created_at)}</span>
-      <p>{content || mediaLabel || "Messaggio senza contenuto testuale."}</p>
-      {message.media_url && message.type === "image" ? (
-        <img className="operator-message-media" src={message.media_url} alt="" />
-      ) : null}
-      {message.media_url && message.type === "audio" ? (
-        <audio className="operator-message-audio" src={message.media_url} controls />
-      ) : null}
+    <article className={isBot ? "operator-chat-message-block" : "operator-chat-message-block operator-chat-message-block-user"}>
+      <time className="operator-chat-timestamp" dateTime={message.created_at || ""}>
+        {isBot ? "TARA" : "Utente"} - {formatDate(message.created_at)}
+      </time>
+      <div className={isBot ? "operator-chat-turn" : "operator-chat-turn operator-chat-turn-user"}>
+        {!isBot ? null : (
+          <span className="chat-avatar chat-avatar-assistant operator-chat-avatar" aria-hidden="true">
+            <img src={chatBotUrl} alt="" />
+          </span>
+        )}
+        <div className="operator-chat-stack">
+          <div className={isBot ? "chat-bubble chat-bubble-assistant operator-chat-bubble" : "chat-bubble chat-bubble-user operator-chat-bubble"}>
+            <p>{content || mediaLabel || "Messaggio senza contenuto testuale."}</p>
+            {message.media_url && message.type === "image" ? (
+              <img className="operator-message-media" src={message.media_url} alt="" />
+            ) : null}
+            {message.media_url && message.type === "audio" ? (
+              <audio className="operator-message-audio" src={message.media_url} controls />
+            ) : null}
+          </div>
+        </div>
+        {isBot ? null : (
+          <span className="chat-avatar chat-avatar-user operator-chat-avatar" aria-hidden="true">
+            <img src={chatUserUrl} alt="" />
+          </span>
+        )}
+      </div>
     </article>
   );
 }
@@ -880,6 +1079,108 @@ function formatOperatorName(name) {
 function openMailTo(email, subject, body) {
   const href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject || "")}&body=${encodeURIComponent(body || "")}`;
   window.location.href = href;
+}
+
+function prepareOperatorNotificationSound(audioContextRef) {
+  try {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) {
+      return;
+    }
+
+    const audioContext = audioContextRef.current || new AudioContextConstructor();
+    audioContextRef.current = audioContext;
+    if (audioContext.state === "suspended") {
+      audioContext.resume().catch(() => {});
+    }
+  } catch (_error) {
+    // Alcuni browser bloccano l'audio finche non c'e una gesture utente valida.
+  }
+}
+
+function playOperatorNotificationSound(audioContextRef) {
+  try {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) {
+      return;
+    }
+
+    const audioContext = audioContextRef.current || new AudioContextConstructor();
+    audioContextRef.current = audioContext;
+
+    const playTone = () => {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      const startTime = audioContext.currentTime;
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, startTime);
+      oscillator.frequency.exponentialRampToValueAtTime(660, startTime + 0.18);
+      gain.gain.setValueAtTime(0.0001, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.055, startTime + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.2);
+
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + 0.22);
+    };
+
+    if (audioContext.state === "suspended") {
+      audioContext.resume().then(playTone).catch(() => {});
+      return;
+    }
+
+    playTone();
+  } catch (error) {
+    console.warn("Suono notifica non disponibile.", error);
+  }
+}
+
+function requestOperatorNotificationPermission() {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return;
+  }
+  if (window.Notification.permission === "default") {
+    window.Notification.requestPermission().catch(() => {});
+  }
+}
+
+function showOperatorNotification({ title, body } = {}) {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return;
+  }
+  if (window.Notification.permission !== "granted") {
+    return;
+  }
+
+  const notification = new window.Notification(title || "Aggiornamento TarAI", {
+    body: body || "Sono disponibili nuovi aggiornamenti.",
+    tag: "tarai-operator-updates",
+    silent: true,
+  });
+  notification.onclick = () => {
+    window.focus();
+    notification.close();
+  };
+}
+
+function updateOperatorAppBadge(count) {
+  if (typeof navigator === "undefined") {
+    return;
+  }
+
+  try {
+    if (count > 0 && "setAppBadge" in navigator) {
+      navigator.setAppBadge(count)?.catch?.(() => {});
+      return;
+    }
+    if (count <= 0 && "clearAppBadge" in navigator) {
+      navigator.clearAppBadge()?.catch?.(() => {});
+    }
+  } catch (_error) {
+    // Il badge PWA non e supportato da tutti i browser.
+  }
 }
 
 function isUnauthorized(error) {

@@ -520,45 +520,14 @@
     min-height: 3rem;
     max-height: 4.2rem;
     line-height: 1.4;
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
 
   #messageList,
   .ticket-list,
   .operator-conversation,
   .message-textarea {
-    scrollbar-color: rgba(2, 132, 199, 0.34) transparent;
-    scrollbar-width: thin;
-  }
-
-  #messageList::-webkit-scrollbar,
-  .ticket-list::-webkit-scrollbar,
-  .operator-conversation::-webkit-scrollbar,
-  .message-textarea::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  #messageList::-webkit-scrollbar-track,
-  .ticket-list::-webkit-scrollbar-track,
-  .operator-conversation::-webkit-scrollbar-track,
-  .message-textarea::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  #messageList::-webkit-scrollbar-thumb,
-  .ticket-list::-webkit-scrollbar-thumb,
-  .operator-conversation::-webkit-scrollbar-thumb,
-  .message-textarea::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    background: rgba(2, 132, 199, 0.34);
-  }
-
-  #messageList::-webkit-scrollbar-thumb:hover,
-  .ticket-list::-webkit-scrollbar-thumb:hover,
-  .operator-conversation::-webkit-scrollbar-thumb:hover,
-  .message-textarea::-webkit-scrollbar-thumb:hover {
-    background: rgba(2, 132, 199, 0.5);
+    scrollbar-width: none;
   }
 
   .chat-composer textarea::placeholder {
@@ -1626,7 +1595,7 @@
   .operator-conversation {
     min-height: 0;
     overflow: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
 
   .ticket-list {
@@ -1638,7 +1607,6 @@
   .ticket-card {
     display: grid;
     width: 100%;
-    overflow: hidden;
     border: 1px solid var(--assistant-bubble-border);
     border-radius: 18px;
     background: rgba(255, 255, 255, 0.72);
@@ -1850,7 +1818,13 @@
     background: rgba(254, 226, 226, 0.82);
     color: #991b1b;
     font-size: 0.88rem;
-    font-weight: 900;
+    font-weight: 400;
+  }
+
+  .app-surface[data-theme="dark"] .operator-alert {
+    border-color: rgba(248, 113, 113, 0.34);
+    background: rgba(127, 29, 29, 0.38);
+    color: #fecaca;
   }
 
   .operator-login-card {
@@ -1985,7 +1959,6 @@
     gap: 0.9rem;
     min-height: 0;
     overflow: auto;
-    padding: 0.1rem 0.2rem 0.2rem;
   }
 
   .operator-panel .ticket-card {
@@ -2365,7 +2338,7 @@
   row-gap: 1.15rem;
   border-top: 1px solid var(--assistant-bubble-border);
   margin-right: -0.45rem;
-  padding: 1rem 0.45rem 0.45rem 0;
+  padding: 1rem 0.45rem 0.45rem 0
 }
 
 .operator-panel .ticket-card {
@@ -2391,7 +2364,6 @@
 .ticket-list-cards .ticket-card-body p {
   display: -webkit-box;
   min-height: 0;
-  overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 5;
 }
@@ -2423,7 +2395,6 @@
   border-bottom: 0;
   gap: 0.8rem;
   min-width: 0;
-  padding: 0.72rem 0.85rem 0.45rem;
 }
 
 .ticket-list-list .ticket-status-pill,
@@ -2448,7 +2419,6 @@
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 0;
-  padding: 0.72rem 0.85rem;
 }
 
 .ticket-list-list .ticket-card-footer {
@@ -2662,6 +2632,7 @@
 }
 
 .ticket-card {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   border: 2px solid var(--assistant-bubble-border);
@@ -2681,6 +2652,23 @@
   box-shadow:
     0 0 0 3px rgba(2, 132, 199, 0.1),
     var(--bubble-shadow);
+}
+
+.ticket-card-unread::before {
+  content: "";
+  position: absolute;
+  top: -0.25rem;
+  right: -0.4rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid var(--operator-card-bg);
+  border-radius: 999px;
+  background: #f05a24;
+  box-shadow:
+    0 0 0 2px rgba(240, 90, 36, 0.18),
+    0 4px 10px rgba(240, 90, 36, 0.22);
+  z-index: 20;
+  pointer-events: none;
 }
 
 .ticket-card-header {
@@ -2888,6 +2876,109 @@
 .operator-message-user {
   background: var(--user-bubble-bg);
   color: var(--user-bubble-text);
+}
+
+.operator-ticket-modal {
+  display: flex;
+  width: min(940px, 94vw);
+  max-height: min(86vh, 820px);
+  flex-direction: column;
+  gap: 1rem;
+  overflow: hidden;
+  padding: clamp(1rem, 2vw, 1.35rem);
+}
+
+.operator-ticket-modal .operator-conversation {
+  flex: 1 1 auto;
+  min-height: 280px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  gap: 1rem;
+  margin-right: -0.35rem;
+  padding: 0.15rem 0.35rem 0.15rem 0;
+}
+
+.operator-chat-message-block {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.operator-chat-message-block-user {
+  align-items: flex-end;
+}
+
+.operator-chat-timestamp {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 0.32rem;
+  margin-left: calc(2.5rem + 0.75rem + 0.15rem);
+  color: var(--feedback-text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.operator-chat-message-block-user .operator-chat-timestamp {
+  align-self: flex-end;
+  margin-right: calc(2.5rem + 0.75rem + 0.15rem);
+  margin-left: 0;
+}
+
+.operator-chat-turn {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.operator-chat-turn-user {
+  justify-content: flex-end;
+}
+
+.operator-chat-stack {
+  display: flex;
+  min-width: 0;
+  max-width: min(82%, calc(100% - 3.25rem));
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.operator-chat-turn-user .operator-chat-stack {
+  align-items: flex-end;
+}
+
+.operator-chat-bubble {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.operator-chat-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.operator-chat-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.operator-message-media {
+  width: min(240px, 100%);
+  max-height: 210px;
+  border: 1px solid var(--assistant-bubble-border);
+  object-fit: cover;
+}
+
+.operator-message-audio {
+  display: block;
+  margin-top: 0.7rem;
+  accent-color: var(--focus-blue);
 }
 
 .operator-login-card {
@@ -3131,6 +3222,16 @@
     padding: 0.95rem;
   }
 
+  .operator-ticket-modal .operator-conversation {
+    min-height: 260px;
+    margin-right: -0.25rem;
+    padding-right: 0.25rem;
+  }
+
+  .operator-chat-stack {
+    max-width: calc(100% - 3.25rem);
+  }
+
   .operator-detail-header {
     align-items: flex-start;
   }
@@ -3148,7 +3249,7 @@
   .operator-panel .ticket-list {
     grid-template-columns: minmax(0, 1fr);
     row-gap: 0.95rem;
-    padding: 1rem 0.2rem 0.45rem;
+    padding: 1rem 0.45rem 0.45rem 0
   }
 
   .operator-page-floating-actions {
