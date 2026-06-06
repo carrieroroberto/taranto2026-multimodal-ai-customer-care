@@ -1,5 +1,7 @@
 from backend.app.schemas.chat import ChatRequestDTO, ChatResponseDTO, SourceDTO
 from backend.app.schemas.conversation import (
+    ConversationMessageCreateDTO,
+    ConversationMessageDeleteDTO,
     ConversationMessagesResponseDTO,
     ConversationRequestDTO,
     ConversationResponseDTO,
@@ -14,6 +16,8 @@ from backend.app.schemas.operator import OperatorLoginRequestDTO, LoginResponseD
 __all__ = [
     "ChatRequestDTO",
     "ChatResponseDTO",
+    "ConversationMessageCreateDTO",
+    "ConversationMessageDeleteDTO",
     "SourceDTO",
     "ConversationMessagesResponseDTO",
     "ConversationRequestDTO",

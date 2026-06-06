@@ -10,6 +10,8 @@ from backend.app.repositories.persistence_repository import (
     update_ticket_status,
 )
 from backend.app.schemas.operator import (
+    ConversationTranslationDTO,
+    EmailDraftDTO,
     LoginResponseDTO,
     LogoutResponseDTO,
     OperatorDTO,
@@ -17,6 +19,10 @@ from backend.app.schemas.operator import (
     TicketStatusUpdateDTO,
 )
 from backend.app.services.auth_service import create_access_token, decode_access_token, verify_password
+from backend.app.services.llm_service import (
+    generate_operator_email_draft,
+    translate_operator_conversation,
+)
 
 
 router = APIRouter(prefix="/operator", tags=["operator"])
@@ -63,7 +69,8 @@ def authenticate_operator(request: OperatorLoginRequestDTO) -> LoginResponseDTO:
         token_type="bearer",
         operator={
             "id": str(operator["id"]),
-            "email": operator["email"]
+            "name": operator.get("name") or "Roberto",
+            "email": operator["email"],
         },
     )
 
@@ -96,6 +103,15 @@ async def logout(
     )
 
 
+@router.get("/me", response_model=OperatorDTO)
+async def me(current_operator: Annotated[dict, Depends(get_current_operator)]):
+    return OperatorDTO(
+        id=str(current_operator["id"]),
+        name=current_operator.get("name") or "Roberto",
+        email=current_operator["email"],
+    )
+
+
 @router.get("/tickets")
 async def list_tickets(
     current_operator: Annotated[dict, Depends(get_current_operator)],
@@ -115,6 +131,37 @@ async def ticket_detail(
     if not detail:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return detail
+
+
+@router.post(
+    "/tickets/{ticket_id}/translate",
+    response_model=ConversationTranslationDTO,
+)
+async def translate_ticket_conversation(
+    ticket_id: str,
+    current_operator: Annotated[dict, Depends(get_current_operator)]
+):
+    detail = get_ticket_detail(ticket_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return ConversationTranslationDTO(
+        messages=await translate_operator_conversation(detail.get("conversation") or [])
+    )
+
+
+@router.post(
+    "/tickets/{ticket_id}/email-draft",
+    response_model=EmailDraftDTO,
+)
+async def ticket_email_draft(
+    ticket_id: str,
+    current_operator: Annotated[dict, Depends(get_current_operator)]
+):
+    detail = get_ticket_detail(ticket_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    draft = await generate_operator_email_draft(detail)
+    return EmailDraftDTO(**draft)
 
 
 @router.patch("/tickets/{ticket_id}/status")

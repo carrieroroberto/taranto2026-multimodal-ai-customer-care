@@ -23,7 +23,7 @@ export function ChatHeader({ t }) {
             </h2>
           </div>
           <div className="chat-bot-status hidden items-center gap-2 text-sm font-medium leading-none sm:flex">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-emerald-100" />
+            <span className="chat-online-dot" />
             {t.online}
           </div>
         </div>

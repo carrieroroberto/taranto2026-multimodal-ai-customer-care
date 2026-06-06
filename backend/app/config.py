@@ -25,11 +25,12 @@ class Settings:
     )
     default_operator_email: str = os.getenv(
         "DEFAULT_OPERATOR_EMAIL",
-        "operatore@tarai.it",
+        "",
     )
+    default_operator_name: str = os.getenv("DEFAULT_OPERATOR_NAME", "Operatore")
     default_operator_password: str = os.getenv(
         "DEFAULT_OPERATOR_PASSWORD",
-        "OperatoreTaranto2026!",
+        "",
     )
     jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "super-secret-key-for-tarai")
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")

@@ -790,3 +790,120 @@ def clean_summary_message_text(content: str) -> str:
     text = re.sub(r"Descrizione immagine:.*", "", text, flags=re.DOTALL)
     text = re.sub(r"Testo estratto dall'immagine:.*", "", text, flags=re.DOTALL)
     return re.sub(r"\s+", " ", text).strip()
+
+
+async def translate_operator_conversation(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Translate readable conversation content to Italian for the operator dashboard."""
+    translated_messages: list[dict[str, Any]] = []
+    readable = []
+    for index, message in enumerate(messages):
+        content = clean_summary_message_text(str(message.get("content") or "")).strip()
+        if not content:
+            translated_messages.append({**message, "translated_content": None})
+            continue
+        translated_messages.append({**message, "translated_content": content})
+        readable.append((index, message.get("role", "messaggio"), content))
+
+    if not readable:
+        return translated_messages
+
+    source_text = "\n".join(
+        f"{idx}. {role}: {content}" for idx, role, content in readable
+    )
+    payload = {
+        "model": settings.ollama_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": (
+                    "Traduci in italiano i messaggi della conversazione customer-care.\n"
+                    "Rispondi SOLO con JSON valido, senza markdown, nel formato:\n"
+                    "{\"translations\":[{\"index\":0,\"text\":\"...\"}]}\n"
+                    "Mantieni invariati nomi, email, date, luoghi e sigle.\n\n"
+                    f"MESSAGGI:\n{source_text}"
+                ),
+            }
+        ],
+        "stream": False,
+        "options": {"temperature": 0, "num_predict": 900},
+    }
+
+    try:
+        content = await smart_llm_call(payload)
+        data = parse_json_object(strip_thinking(content).strip())
+        translations = data.get("translations") if isinstance(data, dict) else None
+        if not isinstance(translations, list):
+            return translated_messages
+
+        for item in translations:
+            try:
+                index = int(item.get("index"))
+            except (TypeError, ValueError):
+                continue
+            text = str(item.get("text") or "").strip()
+            if text and 0 <= index < len(translated_messages):
+                translated_messages[index]["translated_content"] = text
+    except Exception as exc:
+        logger.warning("operator conversation translation failed: %s", exc)
+
+    return translated_messages
+
+
+async def generate_operator_email_draft(ticket: dict[str, Any]) -> dict[str, str]:
+    """Generate a concise Italian email draft for the operator."""
+    user_email = str(ticket.get("user_email") or "").strip()
+    summary = str(ticket.get("summary") or "").strip()
+    domain = str(ticket.get("domain") or "informazioni generali").strip()
+    priority = str(ticket.get("priority") or "media").strip()
+    conversation = ticket.get("conversation") or []
+    conversation_text = "\n".join(
+        f"{message.get('role')}: {clean_summary_message_text(str(message.get('content') or ''))}"
+        for message in conversation[-10:]
+        if clean_summary_message_text(str(message.get("content") or ""))
+    )
+
+    fallback = {
+        "subject": f"Riscontro alla richiesta TarAI - {domain}",
+        "body": (
+            "Ciao,\n\n"
+            "abbiamo ricevuto la tua richiesta tramite TarAI e la stiamo gestendo.\n"
+            f"Riepilogo: {summary or 'richiesta di assistenza sui Giochi del Mediterraneo Taranto 2026'}.\n\n"
+            "Ti ricontatteremo con le informazioni disponibili appena possibile.\n\n"
+            "Cordiali saluti,\nCustomer Care TarAI"
+        ),
+    }
+
+    payload = {
+        "model": settings.ollama_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": (
+                    "Genera una bozza email in italiano per un operatore customer-care.\n"
+                    "Rispondi SOLO con JSON valido, senza markdown, nel formato:\n"
+                    "{\"subject\":\"...\",\"body\":\"...\"}\n"
+                    "Tono: ufficiale, chiaro, utile, non promettere dati non confermati.\n"
+                    "Non inventare date, prezzi, link o informazioni non presenti.\n\n"
+                    f"EMAIL UTENTE: {user_email}\n"
+                    f"DOMINIO: {domain}\n"
+                    f"PRIORITA: {priority}\n"
+                    f"SUMMARY TICKET: {summary}\n"
+                    f"CRONOLOGIA RECENTE:\n{conversation_text}"
+                ),
+            }
+        ],
+        "stream": False,
+        "options": {"temperature": 0.2, "num_predict": 700},
+    }
+
+    try:
+        content = await smart_llm_call(payload)
+        data = parse_json_object(strip_thinking(content).strip())
+        subject = str(data.get("subject") or "").strip()
+        body = str(data.get("body") or "").strip()
+        if subject and body:
+            return {"subject": subject[:160], "body": body}
+    except Exception as exc:
+        logger.warning("operator email draft failed: %s", exc)
+
+    return fallback

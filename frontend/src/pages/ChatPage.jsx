@@ -15,7 +15,9 @@ import {
   SUPPORTED_LOCALES,
 } from "../i18n.js";
 import {
+  deleteConversationMessages,
   fetchConversationMessages,
+  saveConversationMessage,
   sendChatMessage,
   sendMultimodalMessage,
   sendTicket,
@@ -73,7 +75,9 @@ export function ChatPage() {
           return;
         }
 
-        const persistedMessages = payload.messages.map(mapPersistedMessage);
+        const persistedMessages = restorePersistedEscalationState(
+          payload.messages.map(mapPersistedMessage),
+        );
         
         if (persistedMessages.length > 0) {
           setMessages((currentMessages) => {
@@ -86,15 +90,7 @@ export function ChatPage() {
               : currentMessages;
           });
 
-          // PERSIST ESCALATION STATE
-          const lastMsg = persistedMessages[persistedMessages.length - 1];
-          if (
-            lastMsg &&
-            lastMsg.role === "assistant" &&
-            isEscalationText(lastMsg.text)
-          ) {
-            setIsEscalating(true);
-          }
+          setIsEscalating(Boolean(findActiveEscalationFlowId(persistedMessages)));
         }
       } catch (error) {
         console.error("Hydration error:", error);
@@ -247,25 +243,41 @@ export function ChatPage() {
       abortControllerRef.current = controller;
 
       setMessages((prev) => [...prev, userMessage, pendingMessage]);
+      const persistedUserEmailPromise = persistConversationMessageQuietly(userMessage, {
+        role: "user",
+        text: supportEmail,
+      });
       setIsSendingTicket(true);
       try {
         await wait(TICKET_THINKING_MIN_MS);
 
         if (controller.signal.aborted) {
+          await persistedUserEmailPromise;
+          const stoppedText = t.stoppedResponse;
           patchMessage(pendingMessage.id, {
-            text: t.stoppedResponse,
+            text: stoppedText,
             isLoading: false,
             isError: true,
+          });
+          await persistConversationMessageQuietly(pendingMessage, {
+            role: "assistant",
+            text: stoppedText,
           });
           return;
         }
 
         if (!isValidEmail(supportEmail)) {
+          await persistedUserEmailPromise;
+          const invalidEmailText = t.ticketInvalidEmail || "Inserisci un indirizzo email valido.";
           patchMessage(pendingMessage.id, {
-            text: t.ticketInvalidEmail || "Inserisci un indirizzo email valido.",
+            text: invalidEmailText,
             isLoading: false,
             isError: true,
             feedbackDisabled: true,
+          });
+          await persistConversationMessageQuietly(pendingMessage, {
+            role: "assistant",
+            text: invalidEmailText,
           });
           return;
         }
@@ -281,6 +293,8 @@ export function ChatPage() {
           language: requestLocale,
           signal: controller.signal,
         });
+
+        await persistedUserEmailPromise;
 
         // RESET IMMEDIATO STATO ESCALATION
         setIsEscalating(false); 
@@ -298,19 +312,29 @@ export function ChatPage() {
           conversationId: ticketResponse.ticket?.conversation_id || conversationId,
           feedbackDisabled: true,
         });
+        await persistConversationMessageQuietly(pendingMessage, {
+          role: "assistant",
+          text: successText,
+        });
         if (feedbackTarget) {
           patchMessage(feedbackTarget.id, { feedbackLocked: true });
         }
       } catch (error) {
         console.error("Ticket submission failed", error);
+        await persistedUserEmailPromise;
+        const errorText =
+          error.name === "AbortError"
+            ? t.stoppedResponse
+            : getTicketErrorMessage(error, t);
         patchMessage(pendingMessage.id, {
-          text:
-            error.name === "AbortError"
-              ? t.stoppedResponse
-              : getTicketErrorMessage(error, t),
+          text: errorText,
           isLoading: false,
           isError: true,
           feedbackDisabled: true,
+        });
+        await persistConversationMessageQuietly(pendingMessage, {
+          role: "assistant",
+          text: errorText,
         });
       } finally {
         if (abortControllerRef.current === controller) {
@@ -486,6 +510,60 @@ export function ChatPage() {
     );
   }
 
+  async function persistConversationMessage(message, overrides = {}) {
+    const role = overrides.role || message.role;
+    const text = overrides.text ?? message.text ?? "";
+    const savedMessage = await saveConversationMessage({
+      sessionId: sessionIdRef.current,
+      role: role === "assistant" ? "bot" : "user",
+      content: text,
+      messageType: overrides.messageType || message.messageType || "text",
+      mediaUrl: overrides.mediaUrl || null,
+      sources: overrides.sources || null,
+    });
+
+    patchMessage(message.id, {
+      persistedId: savedMessage.id || null,
+      conversationId: savedMessage.conversation_id || null,
+      createdAt: savedMessage.created_at || message.createdAt,
+    });
+
+    return savedMessage;
+  }
+
+  async function persistConversationMessageQuietly(message, overrides = {}) {
+    try {
+      return await persistConversationMessage(message, overrides);
+    } catch (error) {
+      console.warn("Unable to persist conversation message", error);
+      return null;
+    }
+  }
+
+  async function deletePersistedEscalationMessages(escalationFlowId) {
+    if (!escalationFlowId) {
+      return;
+    }
+
+    const messageIds = messages
+      .filter((message) => isEscalationFlowMessage(message, escalationFlowId))
+      .map((message) => message.persistedId)
+      .filter(Boolean);
+
+    if (!messageIds.length) {
+      return;
+    }
+
+    try {
+      await deleteConversationMessages({
+        sessionId: sessionIdRef.current,
+        messageIds,
+      });
+    } catch (error) {
+      console.warn("Unable to delete escalation messages", error);
+    }
+  }
+
   function handleThemeToggle() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }
@@ -537,13 +615,19 @@ export function ChatPage() {
         apologyMsg.conversationId = message.conversationId;
         apologyMsg.feedbackSupportFor = message.id;
         apologyMsg.escalationFlowFor = message.id;
+        apologyMsg.feedbackDisabled = true;
         setMessages(prev => [...prev, apologyMsg]);
+        await persistConversationMessageQuietly(apologyMsg, {
+          role: "assistant",
+          text: apologyText,
+        });
         // Se scatta l'escalation, allora torniamo a scrollare verso il basso
         setShouldScroll(true);
       } else if (previousSatisfaction === false) {
         // Se l'utente cambia da pollice giù a pollice su, chiudi l'escalation se era legata a questo messaggio
         // Ma NON chiudere se l'escalation è stata innescata da un altro motivo (es. richiesta esplicita)
         if (messages.find(m => m.feedbackSupportFor === message.id)) {
+           await deletePersistedEscalationMessages(message.id);
            setIsEscalating(false);
            setShouldScroll(true);
            setComposerResetSignal((value) => value + 1);
@@ -571,6 +655,7 @@ export function ChatPage() {
     }
 
     const targetMessageId = feedbackTarget?.persistedId || feedbackTarget?.id;
+    await deletePersistedEscalationMessages(escalationFlowId);
 
     setMessages(prev =>
       prev
@@ -765,11 +850,51 @@ function mapPersistedMessage(m) {
     sources: normalizeSources(m.sources),
     satisfaction: m.satisfaction ?? null,
     feedbackLocked: Boolean(m.ticket_opened),
-    feedbackDisabled: isEscalationText(text),
+    feedbackDisabled: isTicketServiceText(text),
     createdAt: m.created_at || null,
     isLoading: false,
-    isError: false,
+    isError: isTicketErrorText(text),
   };
+}
+
+function restorePersistedEscalationState(messages) {
+  let latestFeedbackTarget = null;
+  let activeFlowId = null;
+
+  return messages.map((message) => {
+    const nextMessage = { ...message };
+
+    if (
+      message.role === "assistant" &&
+      message.persistedId &&
+      message.satisfaction === false &&
+      !message.feedbackLocked &&
+      !isTicketServiceText(message.text)
+    ) {
+      latestFeedbackTarget = message;
+    }
+
+    if (
+      message.role === "assistant" &&
+      isEscalationText(message.text) &&
+      latestFeedbackTarget
+    ) {
+      activeFlowId = latestFeedbackTarget.id;
+      nextMessage.feedbackSupportFor = activeFlowId;
+      nextMessage.escalationFlowFor = activeFlowId;
+      nextMessage.feedbackDisabled = true;
+      return nextMessage;
+    }
+
+    if (activeFlowId && message.id !== activeFlowId) {
+      nextMessage.escalationFlowFor = activeFlowId;
+      if (message.role === "assistant") {
+        nextMessage.feedbackDisabled = true;
+      }
+    }
+
+    return nextMessage;
+  });
 }
 
 function normalizePersistedMediaUrl(value) {
@@ -820,10 +945,7 @@ function normalizeSources(s) {
 }
 
 function isEscalationText(text) {
-  const normalized = String(text || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+  const normalized = normalizeServiceText(text);
   return (
     normalized.includes("inserisci l'email") ||
     normalized.includes("scrivi la tua email") ||
@@ -835,4 +957,59 @@ function isEscalationText(text) {
     normalized.includes("ingresa tu correo") ||
     normalized.includes("saisissez votre e-mail")
   );
+}
+
+function isTicketServiceText(text) {
+  const normalized = normalizeServiceText(text);
+  return (
+    isEscalationText(text) ||
+    normalized.includes("inserisci un indirizzo email valido") ||
+    normalized.includes("enter a valid email address") ||
+    normalized.includes("introduce una direccion de correo valida") ||
+    normalized.includes("saisissez une adresse e-mail valide") ||
+    normalized.includes("أدخل عنوان بريد إلكتروني صالح") ||
+    normalized.includes("richiesta inviata con successo") ||
+    normalized.includes("request sent successfully") ||
+    normalized.includes("solicitud enviada correctamente") ||
+    normalized.includes("demande envoyee avec succes") ||
+    normalized.includes("تم إرسال الطلب بنجاح") ||
+    normalized.includes("impossibile inviare il ticket") ||
+    normalized.includes("failed to send ticket") ||
+    normalized.includes("error al enviar la solicitud") ||
+    normalized.includes("echec de l'envoi de la demande") ||
+    normalized.includes("فشل إرسال الطلب") ||
+    normalized.includes("richiesta interrotta") ||
+    normalized.includes("request stopped") ||
+    normalized.includes("solicitud interrumpida") ||
+    normalized.includes("reponse interrompue") ||
+    normalized.includes("تم إيقاف الطلب")
+  );
+}
+
+function isTicketErrorText(text) {
+  const normalized = normalizeServiceText(text);
+  return (
+    normalized.includes("inserisci un indirizzo email valido") ||
+    normalized.includes("enter a valid email address") ||
+    normalized.includes("introduce una direccion de correo valida") ||
+    normalized.includes("saisissez une adresse e-mail valide") ||
+    normalized.includes("أدخل عنوان بريد إلكتروني صالح") ||
+    normalized.includes("impossibile inviare il ticket") ||
+    normalized.includes("failed to send ticket") ||
+    normalized.includes("error al enviar la solicitud") ||
+    normalized.includes("echec de l'envoi de la demande") ||
+    normalized.includes("فشل إرسال الطلب") ||
+    normalized.includes("richiesta interrotta") ||
+    normalized.includes("request stopped") ||
+    normalized.includes("solicitud interrumpida") ||
+    normalized.includes("reponse interrompue") ||
+    normalized.includes("تم إيقاف الطلب")
+  );
+}
+
+function normalizeServiceText(text) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }

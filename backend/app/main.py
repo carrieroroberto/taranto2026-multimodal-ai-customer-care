@@ -31,7 +31,11 @@ async def lifespan(_app: FastAPI):
     if settings.default_operator_email and settings.default_operator_password:
         logger.info("Seeding default operator: %s", settings.default_operator_email)
         hashed_password = get_password_hash(settings.default_operator_password)
-        ensure_default_operator(settings.default_operator_email, hashed_password)
+        ensure_default_operator(
+            settings.default_operator_email,
+            hashed_password,
+            settings.default_operator_name,
+        )
 
     start_knowledge_base_startup_task()
     yield

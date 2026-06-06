@@ -11,6 +11,7 @@ class OperatorLoginRequestDTO(BaseModel):
 
 class OperatorDTO(BaseModel):
     id: str
+    name: str
     email: str
 
 
@@ -27,3 +28,12 @@ class LogoutResponseDTO(BaseModel):
 
 class TicketStatusUpdateDTO(BaseModel):
     status: Literal["aperto", "chiuso", "open", "closed"]
+
+
+class ConversationTranslationDTO(BaseModel):
+    messages: list[dict]
+
+
+class EmailDraftDTO(BaseModel):
+    subject: str
+    body: str

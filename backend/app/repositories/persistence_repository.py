@@ -101,6 +101,42 @@ def save_bot_message(
     return save_message(session_id, "bot", content, "text", sources=sources)
 
 
+def delete_conversation_messages(session_id: str, message_ids: list[str]) -> list[str]:
+    if not session_id or not message_ids:
+        return []
+
+    resolved_conversation_id = conversation_uuid(session_id)
+    resolved_message_ids: list[uuid.UUID] = []
+    for message_id in message_ids:
+        try:
+            resolved_message_ids.append(uuid.UUID(str(message_id)))
+        except ValueError:
+            continue
+
+    if not resolved_message_ids:
+        return []
+
+    with connect() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                DELETE FROM messages
+                WHERE conversation_id = %s
+                  AND id = ANY(%s)
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM tickets t
+                    WHERE t.escalated_message_id = messages.id
+                  )
+                RETURNING id
+                """,
+                (resolved_conversation_id, resolved_message_ids),
+            )
+            rows = cursor.fetchall()
+
+    return [str(row["id"]) for row in rows]
+
+
 def save_interaction(session_id: str, interaction: dict[str, Any]) -> None:
     if not session_id:
         return
@@ -277,22 +313,27 @@ def update_message_satisfaction(message_id: str, satisfaction: bool | None) -> d
 
 def get_operator_by_email(email: str) -> dict[str, Any] | None:
     row = fetch_one(
-        "SELECT id, email, password_hash FROM operators WHERE email = %s",
+        "SELECT id, name, email, password_hash FROM operators WHERE email = %s",
         (email,),
     )
     return dict(row) if row else None
 
 
-def ensure_default_operator(email: str, password_hash: str) -> None:
+def ensure_default_operator(email: str, password_hash: str, name: str = "Roberto") -> None:
+    operator_name = str(name or "Roberto").strip() or "Roberto"
     with connect() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO operators (email, password_hash)
-                VALUES (%s, %s)
-                ON CONFLICT (email) DO NOTHING
+                INSERT INTO operators (name, email, password_hash)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (email) DO UPDATE
+                SET name = EXCLUDED.name
+                WHERE operators.name IS NULL
+                   OR TRIM(operators.name) = ''
+                   OR operators.name = 'Operatore'
                 """,
-                (email, password_hash),
+                (operator_name, email, password_hash),
             )
 
 

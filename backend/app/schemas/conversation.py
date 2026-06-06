@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -31,3 +32,15 @@ class ConversationMessagesResponseDTO(BaseModel):
     session_id: str
     conversation_id: str
     messages: list[PersistedMessageDTO]
+
+
+class ConversationMessageCreateDTO(BaseModel):
+    role: Literal["user", "bot"]
+    content: str | None = None
+    message_type: Literal["text", "image", "audio"] = "text"
+    media_url: str | None = None
+    sources: list[SourceDTO] | None = None
+
+
+class ConversationMessageDeleteDTO(BaseModel):
+    message_ids: list[str]

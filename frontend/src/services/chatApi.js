@@ -39,6 +39,65 @@ export async function fetchConversationMessages({ sessionId }) {
   return payload;
 }
 
+export async function saveConversationMessage({
+  sessionId,
+  role,
+  content,
+  messageType = "text",
+  mediaUrl = null,
+  sources = null,
+}) {
+  const response = await fetchWithTimeout(
+    `${DEFAULT_API_BASE}/conversations/${encodeURIComponent(sessionId)}/messages`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        role,
+        content,
+        message_type: messageType,
+        media_url: mediaUrl,
+        sources,
+      }),
+      timeoutMs: 30000,
+    },
+  );
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
+export async function deleteConversationMessages({ sessionId, messageIds }) {
+  const response = await fetchWithTimeout(
+    `${DEFAULT_API_BASE}/conversations/${encodeURIComponent(sessionId)}/messages`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message_ids: messageIds,
+      }),
+      timeoutMs: 30000,
+    },
+  );
+
+  const payload = await parseJsonResponse(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
 export async function sendChatMessage({ message, sessionId, language, signal }) {
   const response = await fetchWithTimeout(`${DEFAULT_API_BASE}/chat`, {
     method: "POST",

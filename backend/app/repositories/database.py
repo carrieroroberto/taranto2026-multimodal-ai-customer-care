@@ -16,6 +16,7 @@ SCHEMA_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS operators (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL DEFAULT 'Operatore',
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
@@ -42,6 +43,7 @@ SCHEMA_STATEMENTS = (
     );
     """,
     "ALTER TABLE operators ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
+    "ALTER TABLE operators ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT 'Operatore';",
     "ALTER TABLE conversations ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE messages ALTER COLUMN created_at SET DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome');",
     "ALTER TABLE messages ALTER COLUMN content DROP NOT NULL;",
@@ -287,17 +289,22 @@ def init_database(max_attempts: int = 30, delay_seconds: float = 1.0) -> None:
 
 def seed_default_operator(cursor: psycopg.Cursor) -> None:
     email = settings.default_operator_email.strip().lower()
+    name = settings.default_operator_name.strip() or "Operatore"
     password = settings.default_operator_password
     if not email or not password:
         return
 
     cursor.execute(
         """
-        INSERT INTO operators (email, password_hash)
-        VALUES (%s, crypt(%s, gen_salt('bf')))
-        ON CONFLICT (email) DO NOTHING
+        INSERT INTO operators (name, email, password_hash)
+        VALUES (%s, %s, crypt(%s, gen_salt('bf')))
+        ON CONFLICT (email) DO UPDATE
+        SET name = EXCLUDED.name
+        WHERE operators.name IS NULL
+           OR TRIM(operators.name) = ''
+           OR operators.name = 'Operatore'
         """,
-        (email, password),
+        (name, email, password),
     )
 
 
