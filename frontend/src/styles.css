@@ -3599,6 +3599,17 @@
 
   .operator-ticket-floating-close {
     display: inline-flex;
+    top: -0.55rem;
+    right: -0.55rem;
+    bottom: auto;
+    width: 2.35rem;
+    height: 2.35rem;
+    z-index: 4;
+  }
+
+  .operator-ticket-floating-close svg {
+    width: 1rem;
+    height: 1rem;
   }
 
   .operator-ticket-summary {
