@@ -693,6 +693,7 @@ function OperatorPanelHeader({ operator, onLogout }) {
 function OperatorLoginCard({ error, onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState("");
 
@@ -737,13 +738,24 @@ function OperatorLoginCard({ error, onLogin }) {
             <PasswordFieldIcon />
             Password
           </span>
-          <input
-            autoComplete="current-password"
-            placeholder="Inserisci password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <span className="operator-password-field">
+            <input
+              autoComplete="current-password"
+              placeholder="Inserisci password"
+              type={isPasswordVisible ? "text" : "password"}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <button
+              className="operator-password-toggle"
+              type="button"
+              aria-label={isPasswordVisible ? "Nascondi password" : "Mostra password"}
+              aria-pressed={isPasswordVisible}
+              onClick={() => setIsPasswordVisible((currentValue) => !currentValue)}
+            >
+              <PasswordVisibilityIcon isVisible={isPasswordVisible} />
+            </button>
+          </span>
         </label>
         {localError || error ? <div className="operator-alert">{localError || error}</div> : null}
         <button className="operator-primary-button" type="submit" disabled={isSubmitting}>
@@ -770,6 +782,16 @@ function PasswordFieldIcon() {
       <path d="M11.75 12.25h8" />
       <path d="M17.25 12.25v2.25" />
       <path d="M20 12.25v2.25" />
+    </svg>
+  );
+}
+
+function PasswordVisibilityIcon({ isVisible }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" focusable="false">
+      <path d="M3.75 12s2.85-5 8.25-5 8.25 5 8.25 5-2.85 5-8.25 5-8.25-5-8.25-5Z" />
+      <circle cx="12" cy="12" r="2.45" />
+      {!isVisible ? <path d="M5 19 19 5" /> : null}
     </svg>
   );
 }

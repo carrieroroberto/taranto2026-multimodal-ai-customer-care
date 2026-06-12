@@ -3184,6 +3184,7 @@
 }
 
 .operator-login-form input {
+  width: 100%;
   min-height: 3.1rem;
   border: 2px solid var(--assistant-bubble-border);
   border-radius: 18px;
@@ -3193,6 +3194,52 @@
   font-size: 0.96rem;
   font-weight: 400;
   box-shadow: var(--bubble-shadow);
+}
+
+.operator-password-field {
+  position: relative;
+  display: block;
+}
+
+.operator-password-field input {
+  padding-right: 3.25rem;
+}
+
+.operator-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  display: inline-flex;
+  width: 2.1rem;
+  height: 2.1rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--brand-kicker);
+  transform: translateY(-50%);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.operator-password-toggle:hover,
+.operator-password-toggle:focus-visible {
+  border-color: var(--theme-toggle-border);
+  background: var(--theme-toggle-hover);
+  color: var(--brand-blue);
+  outline: none;
+}
+
+.operator-password-toggle svg {
+  width: 1.18rem;
+  height: 1.18rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
 }
 
 .operator-login-form input::placeholder {
@@ -3531,17 +3578,13 @@
 
 .operator-ticket-floating-close {
   position: absolute;
-  right: 1rem;
-  bottom: 1rem;
   z-index: 2;
   display: none;
-  width: 3.15rem;
-  height: 3.15rem;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(224, 242, 254, 0.28);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(2, 0, 29, 0.487);
   color: #ffffff;
   box-shadow: 0 14px 30px rgba(2, 6, 23, 0.24);
   backdrop-filter: blur(12px);
@@ -3585,8 +3628,9 @@
     flex-direction: row;
     flex-wrap: nowrap;
     justify-content: flex-end;
-    align-self: center;
+    align-self: end;
     gap: 0.3rem;
+    transform: none;
   }
 
   .operator-ticket-modal .operator-detail-actions button {
@@ -3599,12 +3643,12 @@
 
   .operator-ticket-floating-close {
     display: inline-flex;
-    top: -0.55rem;
-    right: -0.55rem;
+    top: 0.5rem;
+    right: 0.5rem;
     bottom: auto;
-    width: 2.35rem;
-    height: 2.35rem;
-    z-index: 4;
+    width: 2rem;
+    height: 2rem;
+    z-index: 8;
   }
 
   .operator-ticket-floating-close svg {
