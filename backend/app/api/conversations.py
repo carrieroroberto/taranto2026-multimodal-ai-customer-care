@@ -56,6 +56,7 @@ def create_conversation_message(
         session_id=session_id,
         role=request.role,
         content=request.content,
+        caption=request.caption,
         message_type=request.message_type,
         media_url=request.media_url,
         sources=[source.model_dump() for source in request.sources] if request.sources else None,

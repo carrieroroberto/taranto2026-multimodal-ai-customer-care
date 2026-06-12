@@ -963,6 +963,9 @@ function mapPersistedMessage(m) {
   // Se è un'immagine ricaricata dal DB, estraiamo l'URL se presente e puliamo il testo
   if (m.type === "image") {
     image = normalizePersistedMediaUrl(m.media_url);
+    if (!text && m.caption) {
+      text = String(m.caption || '').trim();
+    }
     // Estrai l'URL dell'immagine se è stato salvato
     const urlMatch = text.match(/\[IMAGE_URL:(.*?)\]/);
     if (!image && urlMatch) {

@@ -163,6 +163,7 @@ async def chat_multimodal_endpoint(
             language=language,
             message_type="image",
             stored_user_content=None,
+            caption=user_message,
             media_url=image_url,
         )
         response = await answer_chat(request)

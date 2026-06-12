@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import { chatBotUrl, chatUserUrl, mainLogoUrl } from "../assets/index.js";
 import { DecorativeBackground } from "../components/DecorativeBackground.jsx";
+import { ImageLightbox } from "../components/ImageLightbox.jsx";
 import { AudioWaveform } from "../components/MessageList.jsx";
 import { ThemeToggle } from "../components/ThemeToggle.jsx";
 import {
@@ -35,6 +36,7 @@ export function OperatorDashboardPage() {
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [translatedMessages, setTranslatedMessages] = useState(null);
+  const [isConversationTranslated, setIsConversationTranslated] = useState(false);
   const [statusFilter, setStatusFilter] = useState("aperto");
   const [sortBy, setSortBy] = useState("date");
   const [ticketView, setTicketView] = useState(() => getInitialTicketView());
@@ -52,8 +54,13 @@ export function OperatorDashboardPage() {
   const selectedConversationMessageIdsRef = useRef(new Set());
   const didInitializeSelectedConversationRef = useRef(false);
   const translatedConversationRef = useRef(null);
+  const isConversationTranslatedRef = useRef(false);
 
   const isAuthenticated = Boolean(token);
+
+  useEffect(() => {
+    isConversationTranslatedRef.current = isConversationTranslated;
+  }, [isConversationTranslated]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -180,6 +187,8 @@ export function OperatorDashboardPage() {
     async function loadDetail() {
       setIsLoadingDetail(true);
       setTranslatedMessages(null);
+      setIsConversationTranslated(false);
+      translatedConversationRef.current = null;
       setError("");
       try {
         const detail = await fetchTicketDetail(token, selectedTicketId);
@@ -281,22 +290,21 @@ export function OperatorDashboardPage() {
   }
 
   function handleSelectedTicketRefresh(detail, { notify = false } = {}) {
-    let effectiveDetail = detail;
+    const conversation = Array.isArray(detail?.conversation)
+      ? detail.conversation
+      : [];
     if (
+      isConversationTranslatedRef.current &&
       translatedConversationRef.current &&
       String(detail?.id || "") === String(selectedTicketId || "")
     ) {
       const mergedConversation = mergeTranslatedConversation(
         translatedConversationRef.current,
-        Array.isArray(detail?.conversation) ? detail.conversation : [],
+        conversation,
       );
       translatedConversationRef.current = mergedConversation;
       setTranslatedMessages(mergedConversation);
-      effectiveDetail = { ...detail, conversation: mergedConversation };
     }
-    const conversation = Array.isArray(effectiveDetail?.conversation)
-      ? effectiveDetail.conversation
-      : [];
     const currentMessageIds = new Set(
       conversation.map((message) => String(message?.id || "")).filter(Boolean),
     );
@@ -309,7 +317,7 @@ export function OperatorDashboardPage() {
       );
     });
 
-    setSelectedTicket(effectiveDetail);
+    setSelectedTicket(detail);
     selectedConversationMessageIdsRef.current = currentMessageIds;
 
     if (!didInitializeSelectedConversationRef.current) {
@@ -379,6 +387,7 @@ export function OperatorDashboardPage() {
     didInitializeSelectedConversationRef.current = false;
     translatedConversationRef.current = null;
     setTranslatedMessages(null);
+    setIsConversationTranslated(false);
     setSelectedTicketId(ticketId);
   }
 
@@ -386,6 +395,7 @@ export function OperatorDashboardPage() {
     setSelectedTicketId(null);
     setSelectedTicket(null);
     setTranslatedMessages(null);
+    setIsConversationTranslated(false);
     translatedConversationRef.current = null;
     selectedConversationMessageIdsRef.current = new Set();
     didInitializeSelectedConversationRef.current = false;
@@ -419,13 +429,21 @@ export function OperatorDashboardPage() {
       return;
     }
 
+    if (isConversationTranslatedRef.current) {
+      setIsConversationTranslated(false);
+      isConversationTranslatedRef.current = false;
+      setTranslatedMessages(null);
+      return;
+    }
+
     setIsTranslating(true);
     setError("");
     try {
       const payload = await translateTicketConversation(token, selectedTicket.id);
+      const originalConversation = selectedTicket.conversation || [];
       const translatedConversation = normalizeTranslatedConversation(
         payload,
-        selectedTicket.conversation || [],
+        originalConversation,
       );
       if (!translatedConversation.length) {
         throw new Error("empty translation");
@@ -448,15 +466,8 @@ export function OperatorDashboardPage() {
       }));
       translatedConversationRef.current = nextConversation;
       setTranslatedMessages(nextConversation);
-      setSelectedTicket((currentTicket) => {
-        if (!currentTicket || currentTicket.id !== selectedTicket.id) {
-          return currentTicket;
-        }
-        return {
-          ...currentTicket,
-          conversation: nextConversation,
-        };
-      });
+      setIsConversationTranslated(true);
+      isConversationTranslatedRef.current = true;
     } catch (_error) {
       setError("Impossibile tradurre la conversazione.");
     } finally {
@@ -475,11 +486,8 @@ export function OperatorDashboardPage() {
       const draft = await generateTicketEmailDraft(token, selectedTicket.id);
       openMailTo(selectedTicket.user_email, draft.subject, draft.body);
     } catch (_error) {
-      openMailTo(
-        selectedTicket.user_email,
-        `Riscontro alla richiesta TarAI - ${selectedTicket.domain || "assistenza"}`,
-        `Ciao,\n\nabbiamo ricevuto la tua richiesta tramite TarAI.\n\n${selectedTicket.summary || ""}\n\nCordiali saluti,\nCustomer Care TarAI`,
-      );
+      const fallbackDraft = buildFallbackOperatorEmailDraft(selectedTicket, operator);
+      openMailTo(selectedTicket.user_email, fallbackDraft.subject, fallbackDraft.body);
     } finally {
       setIsDraftingEmail(false);
     }
@@ -551,6 +559,7 @@ export function OperatorDashboardPage() {
         isLoading={isLoadingDetail}
         isOpen={Boolean(selectedTicketId)}
         isTranslating={isTranslating}
+        isConversationTranslated={isConversationTranslated}
         ticket={selectedTicket}
         theme={theme}
         translatedMessages={translatedMessages}
@@ -864,6 +873,7 @@ function TicketDetailModal({
   isLoading,
   isOpen,
   isTranslating,
+  isConversationTranslated,
   ticket,
   theme,
   translatedMessages,
@@ -872,8 +882,11 @@ function TicketDetailModal({
   onStatusToggle,
   onTranslate,
 }) {
+  const [previewImage, setPreviewImage] = useState(null);
+
   useEffect(() => {
     if (!isOpen) {
+      setPreviewImage(null);
       return undefined;
     }
 
@@ -921,14 +934,21 @@ function TicketDetailModal({
           <TicketDetail
             isDraftingEmail={isDraftingEmail}
             isTranslating={isTranslating}
+            isConversationTranslated={isConversationTranslated}
             ticket={ticket}
             translatedMessages={translatedMessages}
             onMailTo={onMailTo}
+            onImageOpen={setPreviewImage}
             onStatusToggle={onStatusToggle}
             onTranslate={onTranslate}
           />
         )}
       </div>
+      <ImageLightbox
+        closeLabel="Chiudi immagine"
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </div>,
     document.body,
   );
@@ -937,13 +957,17 @@ function TicketDetailModal({
 function TicketDetail({
   isDraftingEmail,
   isTranslating,
+  isConversationTranslated,
   ticket,
   translatedMessages,
+  onImageOpen,
   onMailTo,
   onStatusToggle,
   onTranslate,
 }) {
-  const messages = translatedMessages?.length ? translatedMessages : ticket.conversation || [];
+  const messages = isConversationTranslated && translatedMessages?.length
+    ? translatedMessages
+    : ticket.conversation || [];
   const domainLabel = formatTitleCase(ticket.domain || "Informazioni generali");
   const priorityLabel = formatUpperLabel(ticket.priority || "media");
   const statusLabel = formatUpperLabel(ticket.status || "aperto");
@@ -967,10 +991,10 @@ function TicketDetail({
             {isClosed ? "Chiuso" : "Chiudi"}
           </button>
           <button className="operator-translate-ticket-button" type="button" disabled={isTranslating} onClick={onTranslate}>
-            Traduci
+            {isConversationTranslated ? "Originale" : "Traduci"}
           </button>
           <button className="operator-primary-button operator-reply-ticket-button" type="button" disabled={isDraftingEmail} onClick={onMailTo}>
-            {isDraftingEmail ? "Bozza" : "Rispondi"}
+            {"Rispondi"}
           </button>
         </div>
       </div>
@@ -998,6 +1022,7 @@ function TicketDetail({
             <OperatorConversationMessage
               key={`${message.id || "message"}-${message.translation_version || "original"}`}
               message={message}
+              onImageOpen={onImageOpen}
             />
           ))
         ) : (
@@ -1008,9 +1033,14 @@ function TicketDetail({
   );
 }
 
-function OperatorConversationMessage({ message }) {
+function OperatorConversationMessage({ message, onImageOpen }) {
   const isBot = message.role === "bot";
-  const content = message.display_content ?? message.translated_content ?? message.content;
+  const content = firstNonEmpty(
+    message.display_content,
+    message.translated_content,
+    message.content,
+    message.caption,
+  );
   const hasMedia = Boolean(message.media_url);
   const mediaLabel =
     !content && message.type === "image"
@@ -1019,6 +1049,10 @@ function OperatorConversationMessage({ message }) {
         ? "Audio inviato dall'utente"
         : "";
   const visibleText = content || (!hasMedia ? mediaLabel || "Messaggio senza contenuto testuale." : "");
+  const isImageMessage = message.media_url && message.type === "image";
+  const bubbleClassName = isBot
+    ? "chat-bubble chat-bubble-assistant operator-chat-bubble"
+    : `chat-bubble chat-bubble-user operator-chat-bubble${isImageMessage ? " operator-chat-bubble-media" : ""}`;
 
   return (
     <article className={isBot ? "operator-chat-message-block" : "operator-chat-message-block operator-chat-message-block-user"}>
@@ -1032,11 +1066,18 @@ function OperatorConversationMessage({ message }) {
           </span>
         )}
         <div className="operator-chat-stack">
-          <div className={isBot ? "chat-bubble chat-bubble-assistant operator-chat-bubble" : "chat-bubble chat-bubble-user operator-chat-bubble"}>
-            {visibleText ? <p>{visibleText}</p> : null}
-            {message.media_url && message.type === "image" ? (
-              <img className="operator-message-media" src={message.media_url} alt="" />
+          <div className={bubbleClassName}>
+            {isImageMessage ? (
+              <button
+                className="operator-message-image-button"
+                type="button"
+                aria-label="Apri immagine"
+                onClick={() => onImageOpen?.(message.media_url)}
+              >
+                <img className="operator-message-media" src={message.media_url} alt="" />
+              </button>
             ) : null}
+            {visibleText ? <p className={isImageMessage ? "operator-message-media-text" : ""}>{visibleText}</p> : null}
             {message.media_url && message.type === "audio" ? (
               <AudioWaveform
                 audio={{
@@ -1104,8 +1145,9 @@ function normalizeTranslatedConversation(payload, fallbackMessages = []) {
     return {
       ...fallback,
       ...message,
-      display_content: translatedContent || message?.content || fallback.content || "",
-      translated_content: translatedContent || message?.content || fallback.content || "",
+      caption: message?.caption ?? fallback.caption ?? null,
+      display_content: translatedContent || message?.content || message?.caption || fallback.content || fallback.caption || "",
+      translated_content: translatedContent || message?.content || message?.caption || fallback.content || fallback.caption || "",
     };
   });
 }
@@ -1134,6 +1176,7 @@ function mergeTranslatedConversation(translatedMessages = [], latestMessages = [
       ...latestMessage,
       ...translatedMessage,
       media_url: latestMessage.media_url ?? translatedMessage.media_url,
+      caption: latestMessage.caption ?? translatedMessage.caption,
       sources: latestMessage.sources ?? translatedMessage.sources,
       satisfaction: latestMessage.satisfaction ?? translatedMessage.satisfaction,
       ticket_opened: latestMessage.ticket_opened ?? translatedMessage.ticket_opened,
@@ -1217,9 +1260,39 @@ function formatOperatorName(name) {
   return String(name || "Operatore").toLocaleUpperCase("it-IT");
 }
 
+function buildFallbackOperatorEmailDraft(ticket, operator) {
+  const ticketCode = String(ticket?.id || "ticket").split("-")[0].slice(0, 8) || "ticket";
+  const userEmail = String(ticket?.user_email || "").trim();
+  const operatorName = String(operator?.name || "Operatore").trim() || "Operatore";
+  const summary = String(ticket?.summary || "").trim();
+  const specificResponse = summary
+    ? `relativa a ${summary}, la tua segnalazione è stata presa in carico dal customer care e verrà gestita sulla base delle informazioni disponibili.`
+    : "abbiamo preso in carico la tua richiesta e ti forniremo riscontro sulla base delle informazioni disponibili.";
+
+  return {
+    subject: `T.A.L.O.S. - Risposta alla Richiesta di Supporto #${ticketCode}`,
+    body:
+      `Gentile Utente (${userEmail}),\n` +
+      "grazie per averci contattato su T.A.L.O.S., il tuo assistente per i Giochi del Mediterraneo 2026 a Taranto!\n\n" +
+      `In merito alla tua richiesta, ${specificResponse}\n\n` +
+      "Resto a disposizione per eventuali chiarimenti o ulteriori domande!\n\n" +
+      "A presto,\n" +
+      `${operatorName}.`,
+  };
+}
+
 function openMailTo(email, subject, body) {
-  const href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject || "")}&body=${encodeURIComponent(body || "")}`;
+  const href =
+    `mailto:${encodeURIComponent(email)}` +
+    `?subject=${encodeMailtoValue(subject || "")}` +
+    `&body=${encodeMailtoValue(body || "")}`;
   window.location.href = href;
+}
+
+function encodeMailtoValue(value) {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (char) =>
+    `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 }
 
 function isUnauthorized(error) {

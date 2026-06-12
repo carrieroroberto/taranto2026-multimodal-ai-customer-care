@@ -160,7 +160,7 @@ async def ticket_email_draft(
     detail = get_ticket_detail(ticket_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    draft = await generate_operator_email_draft(detail)
+    draft = await generate_operator_email_draft(detail, current_operator)
     return EmailDraftDTO(**draft)
 
 

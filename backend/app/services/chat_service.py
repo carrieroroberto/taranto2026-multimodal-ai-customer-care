@@ -51,6 +51,7 @@ async def answer_chat(request: ChatRequestDTO) -> ChatResponseDTO:
         request.stored_user_content or message,
         request.message_type,
         request.media_url,
+        caption=request.caption or (request.stored_user_content if request.message_type == "image" else None),
     )
     ui_lang = normalize_language_code(request.language) if request.language else "it"
 

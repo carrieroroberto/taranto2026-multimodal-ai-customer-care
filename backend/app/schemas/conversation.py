@@ -21,6 +21,7 @@ class PersistedMessageDTO(BaseModel):
     role: str
     type: str = "text"
     content: str | None = None
+    caption: str | None = None
     media_url: str | None = None
     sources: list[SourceDTO] | None = None
     satisfaction: bool | None = None
@@ -37,6 +38,7 @@ class ConversationMessagesResponseDTO(BaseModel):
 class ConversationMessageCreateDTO(BaseModel):
     role: Literal["user", "bot"]
     content: str | None = None
+    caption: str | None = None
     message_type: Literal["text", "image", "audio"] = "text"
     media_url: str | None = None
     sources: list[SourceDTO] | None = None

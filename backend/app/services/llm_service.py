@@ -707,10 +707,18 @@ async def translate_text(text: str, target_lang: str = "it") -> str:
     payload = {
         "model": settings.ollama_model,
         "messages": [
-            {"role": "user", "content": f"Traduci il testo in {LANGUAGE_NAMES.get(target_lang, 'Italiano')}. Rispondi SOLO con la traduzione.\n\nTesto: {text}"}
+            {
+                "role": "user",
+                "content": (
+                    f"Traduci il testo in {LANGUAGE_NAMES.get(target_lang, 'Italiano')}.\n"
+                    "Il testo puo essere in qualunque lingua; se e' gia nella lingua target, restituiscilo invariato.\n"
+                    "Rispondi SOLO con il testo tradotto, senza etichette, senza introduzioni e senza markdown.\n\n"
+                    f"Testo: {text}"
+                ),
+            }
         ],
         "stream": False,
-        "options": {"temperature": 0}
+        "options": {"temperature": 0, "num_predict": 700}
     }
     try:
         content = await smart_llm_call(payload)
@@ -801,7 +809,7 @@ async def translate_operator_conversation(messages: list[dict[str, Any]]) -> lis
     translated_messages: list[dict[str, Any]] = []
     readable = []
     for index, message in enumerate(messages):
-        content = clean_summary_message_text(str(message.get("content") or "")).strip()
+        content = operator_message_readable_text(message)
         if not content:
             translated_messages.append({**message, "translated_content": None})
             continue
@@ -820,16 +828,20 @@ async def translate_operator_conversation(messages: list[dict[str, Any]]) -> lis
             {
                 "role": "user",
                 "content": (
-                    "Traduci in italiano i messaggi della conversazione customer-care.\n"
+                    "Traduci in italiano i messaggi testuali della conversazione customer-care.\n"
+                    "Ogni messaggio puo essere in una lingua diversa: rileva la lingua di ciascun messaggio in modo indipendente.\n"
+                    "Traduci tutti i messaggi testuali in italiano; se un messaggio e' gia in italiano, restituiscilo invariato.\n"
+                    "Non riassumere, non spiegare, non aggiungere note e non omettere messaggi.\n"
                     "Rispondi SOLO con JSON valido, senza markdown, nel formato:\n"
                     "{\"translations\":[{\"index\":0,\"text\":\"...\"}]}\n"
+                    "Deve esserci esattamente un oggetto per ogni index ricevuto.\n"
                     "Mantieni invariati nomi, email, date, luoghi e sigle.\n\n"
                     f"MESSAGGI:\n{source_text}"
                 ),
             }
         ],
         "stream": False,
-        "options": {"temperature": 0, "num_predict": 900},
+        "options": {"temperature": 0, "num_predict": 2200},
     }
 
     try:
@@ -839,7 +851,7 @@ async def translate_operator_conversation(messages: list[dict[str, Any]]) -> lis
         if not isinstance(translations, list):
             return await translate_operator_conversation_items(translated_messages, readable)
 
-        applied_translations = 0
+        applied_indexes: set[int] = set()
         for item in translations:
             try:
                 index = int(item.get("index"))
@@ -848,9 +860,19 @@ async def translate_operator_conversation(messages: list[dict[str, Any]]) -> lis
             text = str(item.get("text") or "").strip()
             if text and 0 <= index < len(translated_messages):
                 translated_messages[index]["translated_content"] = text
-                applied_translations += 1
-        if applied_translations == 0:
+                applied_indexes.add(index)
+        if not applied_indexes:
             return await translate_operator_conversation_items(translated_messages, readable)
+        missing_readable = [
+            (index, role, content)
+            for index, role, content in readable
+            if index not in applied_indexes
+        ]
+        if missing_readable:
+            return await translate_operator_conversation_items(
+                translated_messages,
+                missing_readable,
+            )
     except Exception as exc:
         logger.warning("operator conversation translation failed: %s", exc)
         return await translate_operator_conversation_items(translated_messages, readable)
@@ -873,29 +895,33 @@ async def translate_operator_conversation_items(
     return translated_messages
 
 
-async def generate_operator_email_draft(ticket: dict[str, Any]) -> dict[str, str]:
-    """Generate a concise Italian email draft for the operator."""
+async def generate_operator_email_draft(
+    ticket: dict[str, Any],
+    operator: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    """Generate a concise email draft for the operator in the user's language."""
     user_email = str(ticket.get("user_email") or "").strip()
+    operator_name = str((operator or {}).get("name") or "Operatore").strip() or "Operatore"
+    ticket_code = str(ticket.get("id") or "").split("-")[0][:8] or "ticket"
     summary = str(ticket.get("summary") or "").strip()
     domain = str(ticket.get("domain") or "informazioni generali").strip()
     priority = str(ticket.get("priority") or "media").strip()
     conversation = ticket.get("conversation") or []
+    readable_messages = [
+        (message.get("role", "messaggio"), operator_message_readable_text(message))
+        for message in conversation[-12:]
+    ]
     conversation_text = "\n".join(
-        f"{message.get('role')}: {clean_summary_message_text(str(message.get('content') or ''))}"
-        for message in conversation[-10:]
-        if clean_summary_message_text(str(message.get("content") or ""))
+        f"{role}: {content}"
+        for role, content in readable_messages
+        if content
     )
-
-    fallback = {
-        "subject": f"Riscontro alla richiesta T.A.L.O.S. - {domain}",
-        "body": (
-            "Ciao,\n\n"
-            "abbiamo ricevuto la tua richiesta tramite T.A.L.O.S. e la stiamo gestendo.\n"
-            f"Riepilogo: {summary or 'richiesta di assistenza sui Giochi del Mediterraneo Taranto 2026'}.\n\n"
-            "Ti ricontatteremo con le informazioni disponibili appena possibile.\n\n"
-            "Cordiali saluti,\nCustomer Care T.A.L.O.S."
-        ),
-    }
+    fallback_subject = f"T.A.L.O.S. - Risposta alla Richiesta di Supporto #{ticket_code}"
+    fallback_body = build_operator_email_body(
+        user_email,
+        fallback_operator_email_specific_response(summary),
+        operator_name,
+    )
 
     payload = {
         "model": settings.ollama_model,
@@ -903,12 +929,20 @@ async def generate_operator_email_draft(ticket: dict[str, Any]) -> dict[str, str
             {
                 "role": "user",
                 "content": (
-                    "Genera una bozza email in italiano per un operatore customer-care.\n"
-                    "Rispondi SOLO con JSON valido, senza markdown, nel formato:\n"
-                    "{\"subject\":\"...\",\"body\":\"...\"}\n"
-                    "Tono: ufficiale, chiaro, utile, non promettere dati non confermati.\n"
+                    "Genera il testo personalizzato per una bozza email customer-care TALOS.\n"
+                    "Rileva la lingua dell'utente dalla cronologia, dando priorita all'ultimo messaggio utente leggibile.\n"
+                    "Scrivi il testo personalizzato nella stessa lingua dell'utente. Se la lingua non e' chiara, usa italiano.\n"
+                    "Il testo deve essere personalizzato in base alla conversazione dando una possibile soluzione. NON nominare mai TALOS, l'utente, l'operatore, ma DEVI scrivere come se sei tu stesso l'operatore che sta rispondendo all'utente e non in terza persona. Rendi la risposta coerente per continuare il messaggio introduttivo e di apertura della mail.\n"
+                    "Mantieni T.A.L.O.S. invariato e non tradurre il nome/acronimo.\n"
+                    "Non includere saluti, oggetto, firma, markdown o template completo.\n"
+                    "Non iniziare con formule equivalenti a 'In merito alla tua richiesta' o 'Regarding your request'.\n"
+                    "Massimo 2 frasi.\n"
                     "Non inventare date, prezzi, link o informazioni non presenti.\n\n"
+                    "Rispondi SOLO con JSON valido, senza markdown, nel formato:\n"
+                    "{\"language\":\"it|en|es|fr|ar|other\",\"specific_response\":\"...\"}\n\n"
+                    f"CODICE TICKET: {ticket_code}\n"
                     f"EMAIL UTENTE: {user_email}\n"
+                    f"NOME OPERATORE: {operator_name}\n"
                     f"DOMINIO: {domain}\n"
                     f"PRIORITA: {priority}\n"
                     f"SUMMARY TICKET: {summary}\n"
@@ -923,11 +957,148 @@ async def generate_operator_email_draft(ticket: dict[str, Any]) -> dict[str, str
     try:
         content = await smart_llm_call(payload)
         data = parse_json_object(strip_thinking(content).strip())
-        subject = str(data.get("subject") or "").strip()
-        body = str(data.get("body") or "").strip()
-        if subject and body:
-            return {"subject": subject[:160], "body": body}
+        language = normalize_language_code(str(data.get("language") or ""), "it")
+        subject = operator_email_subject_for_language(language, ticket_code)
+        specific_response = clean_operator_email_specific_response(
+            str(data.get("specific_response") or data.get("body") or "")
+        )
+        if subject and specific_response:
+            body = build_operator_email_body_for_language(
+                language,
+                user_email,
+                specific_response,
+                operator_name,
+            )
+            return {"subject": subject, "body": body}
     except Exception as exc:
         logger.warning("operator email draft failed: %s", exc)
 
-    return fallback
+    return {
+        "subject": fallback_subject,
+        "body": fallback_body,
+    }
+
+
+def operator_message_readable_text(message: dict[str, Any]) -> str:
+    message_type = str(message.get("type") or "text").strip().lower()
+    content = clean_summary_message_text(str(message.get("content") or "")).strip()
+    caption = clean_summary_message_text(str(message.get("caption") or "")).strip()
+    if message_type == "image" and caption:
+        return f"Messaggio con immagine - testo utente: {caption}"
+    return content or caption
+
+
+def operator_email_subject_for_language(language: str, ticket_code: str) -> str:
+    code = ticket_code or "ticket"
+    match normalize_language_code(language, "it"):
+        case "en":
+            return f"T.A.L.O.S. - Reply to Support Request #{code}"
+        case "es":
+            return f"T.A.L.O.S. - Respuesta a la Solicitud de Soporte #{code}"
+        case "fr":
+            return f"T.A.L.O.S. - Reponse a la Demande de Support #{code}"
+        case "ar":
+            return f"T.A.L.O.S. - رد على طلب الدعم #{code}"
+        case _:
+            return f"T.A.L.O.S. - Risposta alla Richiesta di Supporto #{code}"
+
+
+def build_operator_email_body_for_language(
+    language: str,
+    user_email: str,
+    specific_response: str,
+    operator_name: str,
+) -> str:
+    normalized_language = normalize_language_code(language, "it")
+    continuation = email_specific_continuation(specific_response, normalized_language)
+    match normalized_language:
+        case "en":
+            return (
+                f"Dear User ({user_email}),\n"
+                "thank you for contacting T.A.L.O.S., your assistant for the 2026 Mediterranean Games in Taranto!\n\n"
+                f"Regarding your request, {continuation}\n\n"
+                "I remain available for any clarification or further questions!\n\n"
+                "See you soon,\n"
+                f"{operator_name}."
+            )
+        case "es":
+            return (
+                f"Estimado usuario ({user_email}),\n"
+                "gracias por contactar con T.A.L.O.S., tu asistente para los Juegos Mediterraneos 2026 en Taranto!\n\n"
+                f"Con respecto a tu solicitud, {continuation}\n\n"
+                "Quedo a tu disposicion para cualquier aclaracion o pregunta adicional!\n\n"
+                "Hasta pronto,\n"
+                f"{operator_name}."
+            )
+        case "fr":
+            return (
+                f"Cher utilisateur ({user_email}),\n"
+                "merci d'avoir contacte T.A.L.O.S., votre assistant pour les Jeux Mediterraneens 2026 a Tarente!\n\n"
+                f"Concernant votre demande, {continuation}\n\n"
+                "Je reste a votre disposition pour toute clarification ou question supplementaire!\n\n"
+                "A bientot,\n"
+                f"{operator_name}."
+            )
+        case "ar":
+            return (
+                f"عزيزي المستخدم ({user_email}),\n"
+                "شكرًا لتواصلك مع T.A.L.O.S.، مساعدك لألعاب البحر الأبيض المتوسط 2026 في تارانتو!\n\n"
+                f"بخصوص طلبك، {continuation}\n\n"
+                "أبقى متاحًا لأي توضيحات أو أسئلة إضافية!\n\n"
+                "إلى اللقاء قريبًا،\n"
+                f"{operator_name}."
+            )
+        case _:
+            return build_operator_email_body(user_email, specific_response, operator_name)
+
+
+def clean_operator_email_body(body: str) -> str:
+    cleaned = strip_markdown(body or "").strip().strip('"')
+    cleaned = cleaned.replace("\\n", "\n")
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def fallback_operator_email_specific_response(summary: str) -> str:
+    if summary:
+        return (
+            f"relativa a {summary}, la tua segnalazione e' stata presa in carico "
+            "dal customer care e verra gestita sulla base delle informazioni disponibili."
+        )
+    return (
+        "abbiamo preso in carico la tua richiesta e ti forniremo riscontro "
+        "sulla base delle informazioni disponibili."
+    )
+
+
+def clean_operator_email_specific_response(text: str) -> str:
+    cleaned = strip_markdown(text or "").strip()
+    cleaned = re.sub(r"^(?:in merito alla tua richiesta\s*)", "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"^(?:oggetto|subject|corpo|body)\s*[:\-]\s*", "", cleaned, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = cleaned.lstrip(" ,;:-")
+    cleaned = cleaned.strip()
+    if not cleaned:
+        return ""
+    return cleaned if cleaned.endswith((".", "?", "!")) else f"{cleaned}."
+
+
+def build_operator_email_body(user_email: str, specific_response: str, operator_name: str) -> str:
+    continuation = email_specific_continuation(specific_response, "it")
+    return (
+        f"Gentile Utente ({user_email}),\n"
+        "grazie per averci contattato su T.A.L.O.S., il tuo assistente per i Giochi del Mediterraneo 2026 a Taranto!\n\n"
+        f"In merito alla tua richiesta, {continuation}\n\n"
+        "Resto a disposizione per eventuali chiarimenti o ulteriori domande!\n\n"
+        "A presto,\n"
+        f"{operator_name}."
+    )
+
+
+def email_specific_continuation(text: str, language: str) -> str:
+    cleaned = str(text or "").strip()
+    if normalize_language_code(language, "it") not in {"it", "en", "es", "fr"}:
+        return cleaned
+    if len(cleaned) > 1 and cleaned[0].isupper() and cleaned[1].islower():
+        return f"{cleaned[0].lower()}{cleaned[1:]}"
+    return cleaned

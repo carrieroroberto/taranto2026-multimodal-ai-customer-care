@@ -46,6 +46,7 @@ def save_message(
     message_type: str = "text",
     media_url: str | None = None,
     sources: list[Any] | None = None,
+    caption: str | None = None,
 ) -> dict[str, Any]:
     if role not in {"user", "bot"}:
         raise ValueError("role must be 'user' or 'bot'.")
@@ -66,15 +67,16 @@ def save_message(
             )
             cursor.execute(
                 """
-                INSERT INTO messages (conversation_id, role, type, content, media_url, sources, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
-                RETURNING id, conversation_id, role, type, content, media_url, sources, satisfaction, created_at
+                INSERT INTO messages (conversation_id, role, type, content, caption, media_url, sources, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP AT TIME ZONE 'Europe/Rome')
+                RETURNING id, conversation_id, role, type, content, caption, media_url, sources, satisfaction, created_at
                 """,
                 (
                     resolved_id,
                     role,
                     message_type,
                     stored_content,
+                    normalize_message_caption(role, caption, message_type),
                     normalize_media_url(media_url),
                     normalize_sources_value(role, sources),
                 ),
@@ -89,8 +91,9 @@ def save_user_message(
     content: str | None,
     message_type: str = "text",
     media_url: str | None = None,
+    caption: str | None = None,
 ) -> dict[str, Any]:
-    return save_message(session_id, "user", content, message_type, media_url)
+    return save_message(session_id, "user", content, message_type, media_url, caption=caption)
 
 
 def save_bot_message(
@@ -163,6 +166,7 @@ def get_conversation_messages(session_id: str) -> list[dict[str, Any]]:
             m.role,
             m.type,
             m.content,
+            m.caption,
             m.media_url,
             m.sources,
             m.satisfaction,
@@ -550,6 +554,13 @@ def normalize_message_content(role: str, content: str | None, message_type: str)
         return None
 
     text = str(content or "").strip()
+    return text or None
+
+
+def normalize_message_caption(role: str, caption: str | None, message_type: str) -> str | None:
+    if role != "user" or message_type != "image":
+        return None
+    text = str(caption or "").strip()
     return text or None
 
 

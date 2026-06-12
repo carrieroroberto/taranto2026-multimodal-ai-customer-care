@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL CHECK (role IN ('user', 'bot')),
     type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'audio')),
     content TEXT DEFAULT NULL,
+    caption TEXT DEFAULT NULL,
     media_url TEXT DEFAULT NULL,
     sources JSONB DEFAULT NULL,
     satisfaction BOOLEAN DEFAULT NULL,
