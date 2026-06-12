@@ -434,6 +434,16 @@ def answer_repeats_user_text(answer: str, message: str) -> bool:
 
 
 def human_operator_answer(response_language: str = "it") -> str:
+    ticket_via_feedback_answers = {
+        "it": "Per aprire una richiesta di supporto con un operatore, usa il feedback negativo sulla risposta che non ti e' stata utile.",
+        "en": "To open a support request with an operator, use negative feedback on the answer that was not helpful.",
+        "es": "Para abrir una solicitud de soporte con un operador, usa el feedback negativo en la respuesta que no te resulto util.",
+        "fr": "Pour ouvrir une demande de support avec un operateur, utilisez le feedback negatif sur la reponse qui ne vous a pas ete utile.",
+        "ar": "لفتح طلب دعم مع موظف، استخدم التقييم السلبي على الإجابة التي لم تكن مفيدة.",
+    }
+    lang = normalize_language_code(response_language)
+    return ticket_via_feedback_answers.get(lang, ticket_via_feedback_answers["it"])
+
     answers = {
         "it": "Certo, scrivi la tua email nella casella di testo e verrai ricontattato da un operatore umano il prima possibile.",
         "en": "Sure, write your email in the text box and you will be contacted by a human operator as soon as possible.",

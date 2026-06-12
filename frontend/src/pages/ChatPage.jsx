@@ -397,8 +397,8 @@ export function ChatPage() {
         persistedId: response.bot_message_id || null,
         conversationId: response.conversation_id || null,
         createdAt: response.bot_created_at || pendingMessage.createdAt,
-        feedbackDisabled: Boolean(response.should_escalate || response.needs_email_for_ticket),
-        escalationFlowFor: response.needs_email_for_ticket ? pendingMessage.id : null,
+        feedbackDisabled: false,
+        escalationFlowFor: null,
         text: response.answer || t.unavailableAnswer,
         sources: normalizeSources(response.sources),
         isLoading: false,
@@ -414,33 +414,6 @@ export function ChatPage() {
         setLocale(response.language);
       }
 
-      if (response.needs_email_for_ticket) {
-        const knownSupportEmail = getKnownSupportEmail(messages);
-        if (isValidEmail(knownSupportEmail)) {
-          storeSupportEmail(knownSupportEmail);
-          patchMessage(pendingMessage.id, {
-            text: "",
-            isLoading: true,
-            feedbackDisabled: true,
-            escalationFlowFor: null,
-            persistedId: null,
-          });
-          await submitStoredEmailTicket(
-            {
-              ...userMessage,
-              persistedId: response.user_message_id || null,
-              conversationId: response.conversation_id || null,
-            },
-            knownSupportEmail,
-            {
-              pendingMessage,
-              deletePersistedMessageIds: response.bot_message_id ? [response.bot_message_id] : [],
-            },
-          );
-        } else {
-          setIsEscalating(true);
-        }
-      }
     } catch (error) {
       if (error.name === "AbortError") {
         patchMessage(pendingMessage.id, {
@@ -511,8 +484,8 @@ export function ChatPage() {
         persistedId: response.bot_message_id || null,
         conversationId: response.conversation_id || null,
         createdAt: response.bot_created_at || pendingMessage.createdAt,
-        feedbackDisabled: Boolean(response.should_escalate || response.needs_email_for_ticket),
-        escalationFlowFor: response.needs_email_for_ticket ? pendingMessage.id : null,
+        feedbackDisabled: false,
+        escalationFlowFor: null,
         text: answerText,
         sources: normalizeSources(response.sources),
         isLoading: false,
@@ -525,34 +498,6 @@ export function ChatPage() {
 
       if (response.language_detected && response.language && response.language !== locale) {
         setLocale(response.language);
-      }
-
-      if (response.needs_email_for_ticket) {
-        const knownSupportEmail = getKnownSupportEmail(messages);
-        if (isValidEmail(knownSupportEmail)) {
-          storeSupportEmail(knownSupportEmail);
-          patchMessage(pendingMessage.id, {
-            text: "",
-            isLoading: true,
-            feedbackDisabled: true,
-            escalationFlowFor: null,
-            persistedId: null,
-          });
-          await submitStoredEmailTicket(
-            {
-              ...userMessage,
-              persistedId: response.user_message_id || null,
-              conversationId: response.conversation_id || null,
-            },
-            knownSupportEmail,
-            {
-              pendingMessage,
-              deletePersistedMessageIds: response.bot_message_id ? [response.bot_message_id] : [],
-            },
-          );
-        } else {
-          setIsEscalating(true);
-        }
       }
 
       if (!isImage) {

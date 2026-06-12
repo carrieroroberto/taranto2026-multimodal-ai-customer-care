@@ -93,7 +93,7 @@ async def planning_node(state: AgentState) -> Dict[str, Any]:
     if explicit_operator_requested(message):
         return {
             "plan": plan,
-            "should_escalate": True,
+            "should_escalate": False,
             "escalation_reason": "human_operator_requested",
             "answer": human_operator_answer(plan.response_language)
         }

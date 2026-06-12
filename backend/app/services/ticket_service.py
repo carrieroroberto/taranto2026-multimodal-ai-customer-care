@@ -10,7 +10,12 @@ from backend.app.repositories.persistence_repository import (
     get_conversation_messages,
 )
 from backend.app.config import settings
-from backend.app.services.llm_service import generate_conversation_summary
+from backend.app.services.llm_service import (
+    generate_conversation_summary,
+    parse_json_object,
+    smart_llm_call,
+    strip_thinking,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -29,16 +34,25 @@ async def generate_ticket_triage(
         }
 
     escalation_message = find_escalation_message(messages, escalated_message_id)
-    content = escalation_message["content"]
+    content = ticket_message_text(escalation_message)
     fallback_summary = build_fallback_conversation_summary(messages, escalated_message_id)
 
     # Generate a concise Italian summary focused on the message that opened escalation.
     generated_summary = await generate_conversation_summary(messages, escalation_message)
     if not is_usable_summary(generated_summary):
         generated_summary = fallback_summary
-    
-    raw_domain = detect_ticket_domain(content, generated_summary)
-    priority = priority_for_ticket(content, raw_domain)
+
+    llm_triage = await generate_llm_ticket_triage(messages, escalation_message, generated_summary)
+    raw_domain = (
+        normalize_raw_ticket_domain(llm_triage.get("domain"))
+        if llm_triage
+        else detect_ticket_domain(content, generated_summary)
+    )
+    priority = (
+        normalize_ticket_priority_value(llm_triage.get("priority"))
+        if llm_triage
+        else priority_for_ticket(f"{content} {generated_summary}", raw_domain)
+    )
     
     return {
         "domain": localize_ticket_domain(raw_domain),
@@ -46,6 +60,21 @@ async def generate_ticket_triage(
         "summary": generated_summary,
     }
 
+
+RAW_TICKET_DOMAINS = {
+    "general_information",
+    "ticketing",
+    "venue",
+    "event_schedule",
+    "transport",
+    "accessibility",
+    "volunteers",
+    "contacts",
+    "complaint",
+    "partnership",
+    "school_project",
+    "tender_notice",
+}
 
 HIGH_PRIORITY_TERMS = (
     "urgente",
@@ -110,6 +139,7 @@ EVENT_RELATED_TERMS = (
     "evento",
     "atleta",
     "biglietto",
+    "bigliett",
     "ticket",
     "volontari",
     "venue",
@@ -130,8 +160,65 @@ DOMAIN_ALIASES = {
 }
 
 
+async def generate_llm_ticket_triage(
+    messages: list[dict[str, Any]],
+    escalation_message: dict[str, Any],
+    summary: str,
+) -> dict[str, str] | None:
+    escalation_text = ticket_message_text(escalation_message)
+    recent_text = "\n".join(
+        f"{message.get('role', 'messaggio')}: {ticket_message_text(message)}"
+        for message in messages[-10:]
+        if ticket_message_text(message)
+    )
+    if not escalation_text and not recent_text:
+        return None
+
+    payload = {
+        "model": settings.ollama_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": (
+                    "Classifica un ticket customer-care per la dashboard operatore.\n"
+                    "Rispondi SOLO con JSON valido, senza markdown, nel formato:\n"
+                    "{\"domain\":\"...\",\"priority\":\"bassa|media|alta\"}\n\n"
+                    "DOMINI ammessi: general_information, ticketing, venue, event_schedule, "
+                    "transport, accessibility, volunteers, contacts, complaint, partnership, "
+                    "school_project, tender_notice.\n"
+                    "Regole dominio: scegli un dominio specifico solo se la richiesta lo indica chiaramente; "
+                    "se e' vaga, generica, fuorviante, un saluto, una prova o non e' azionabile, usa general_information.\n"
+                    "Regole priorita: alta solo per sicurezza, accessibilita critica, urgenze reali, reclami gravi "
+                    "o problemi che impediscono fruizione/accesso; media per richieste concrete ma non urgenti; "
+                    "bassa per richieste vaghe, generiche, saluti, test, informazioni semplici o casi non specificati.\n"
+                    "Non dedurre biglietteria, trasporti o calendario solo perche si parla genericamente dei Giochi.\n\n"
+                    f"MESSAGGIO ESCALATION:\n{escalation_text}\n\n"
+                    f"SUMMARY:\n{summary}\n\n"
+                    f"CRONOLOGIA RECENTE:\n{recent_text}"
+                ),
+            }
+        ],
+        "stream": False,
+        "options": {"temperature": 0, "num_predict": 180},
+    }
+
+    try:
+        content = await smart_llm_call(payload)
+        data = parse_json_object(strip_thinking(content).strip())
+        domain = normalize_raw_ticket_domain(data.get("domain"))
+        priority = normalize_ticket_priority_value(data.get("priority"))
+        if domain and priority:
+            return {"domain": domain, "priority": priority}
+    except Exception as exc:
+        logger.warning("ticket triage LLM classification failed: %s", exc)
+
+    return None
+
+
 def detect_ticket_domain(content: str, summary: str) -> str:
     text = normalize_for_triage(f"{content} {summary}")
+    if looks_vague_or_non_actionable(text):
+        return "general_information"
     tokens = set(text.split())
     best_domain = "general_information"
     best_score = 0
@@ -148,7 +235,7 @@ def detect_ticket_domain(content: str, summary: str) -> str:
             best_score = alias_score
             best_domain = domain
 
-    return best_domain
+    return best_domain if best_score >= 4 else "general_information"
 
 
 def localize_ticket_domain(domain: str | None) -> str:
@@ -225,26 +312,56 @@ def load_triage_knowledge_records() -> tuple[dict[str, str], ...]:
 def score_knowledge_match(query_text: str, query_tokens: set[str], source_text: str) -> int:
     score = 0
     for token in query_tokens:
-        if len(token) < 4:
+        if len(token) < 4 or token in TRIAGE_STOP_TOKENS:
             continue
         if token in source_text:
             score += 1
-    if query_text and query_text in source_text:
+    if len(query_text) >= 24 and query_text in source_text:
         score += 8
     return score
 
 
 def priority_for_ticket(content: str, domain: str) -> str:
     text = normalize_for_triage(content)
-    if looks_useless_request(text):
+    if looks_vague_or_non_actionable(text):
         return "bassa"
     if contains_any(text, HIGH_PRIORITY_TERMS):
         return "alta"
     if contains_any(text, MEDIUM_PRIORITY_TERMS):
         return "media"
+    if domain and domain != "general_information":
+        return DOMAIN_PRIORITY.get(domain, "media")
     if not is_event_related(text):
         return "bassa"
     return DOMAIN_PRIORITY.get(domain, "media")
+
+
+TRIAGE_STOP_TOKENS = {
+    "giochi",
+    "mediterraneo",
+    "mediterranei",
+    "taranto",
+    "taranto2026",
+    "2026",
+    "talos",
+    "assistente",
+    "operatore",
+    "supporto",
+    "utente",
+    "richiesta",
+    "informazioni",
+    "informazione",
+    "ciao",
+    "salve",
+    "grazie",
+}
+
+
+def looks_vague_or_non_actionable(normalized_text: str) -> bool:
+    if looks_useless_request(normalized_text):
+        return True
+    tokens = [token for token in normalized_text.split() if token not in TRIAGE_STOP_TOKENS]
+    return len(tokens) <= 1
 
 
 def looks_useless_request(normalized_text: str) -> bool:
@@ -261,6 +378,38 @@ def normalize_for_triage(value: str) -> str:
     text = unicodedata.normalize("NFKD", value or "")
     text = "".join(ch for ch in text if not unicodedata.combining(ch))
     return re.sub(r"[^a-z0-9']+", " ", text.lower()).strip()
+
+
+def normalize_raw_ticket_domain(value: Any) -> str:
+    normalized = normalize_for_triage(str(value or "")).replace(" ", "_")
+    aliases = {
+        "calendar": "event_schedule",
+        "schedule": "event_schedule",
+        "venue_information": "venue",
+        "volunteering": "volunteers",
+        "general": "general_information",
+        "unknown": "general_information",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in RAW_TICKET_DOMAINS else "general_information"
+
+
+def normalize_ticket_priority_value(value: Any) -> str:
+    normalized = normalize_for_triage(str(value or ""))
+    return {
+        "alta": "alta",
+        "high": "alta",
+        "media": "media",
+        "medium": "media",
+        "bassa": "bassa",
+        "low": "bassa",
+    }.get(normalized, "bassa")
+
+
+def ticket_message_text(message: dict[str, Any]) -> str:
+    content = clean_message_content(str(message.get("content") or ""))
+    caption = clean_message_content(str(message.get("caption") or ""))
+    return content or caption
 
 
 def contains_any(haystack: str, terms: tuple[str, ...]) -> bool:
@@ -289,12 +438,12 @@ def build_fallback_conversation_summary(
     escalated_message_id: str | None = None,
 ) -> str:
     escalation_message = find_escalation_message(messages, escalated_message_id)
-    user_messages = [clean_message_content(str(message.get("content") or "")) for message in messages if message.get("role") == "user"]
+    user_messages = [ticket_message_text(message) for message in messages if message.get("role") == "user"]
     user_messages = [summarize_text(message, 180) for message in user_messages if message.strip()]
     if not user_messages:
         return "L'utente ha richiesto assistenza, ma non sono presenti messaggi utente leggibili nella conversazione."
 
-    escalation_text = summarize_text(clean_message_content(str(escalation_message.get("content") or "")), 220)
+    escalation_text = summarize_text(ticket_message_text(escalation_message), 220)
     if len(user_messages) == 1:
         return f"L'utente ha richiesto assistenza su: {escalation_text}"
 
@@ -323,7 +472,7 @@ def find_escalation_message(
                 previous_message = messages[previous_index]
                 if (
                     previous_message.get("role") == "user"
-                    and str(previous_message.get("content") or "").strip()
+                    and ticket_message_text(previous_message)
                 ):
                     return previous_message
 
@@ -338,11 +487,11 @@ def find_escalation_message(
     if negative_bot_indexes:
         bot_index = negative_bot_indexes[-1]
         for index in range(bot_index - 1, -1, -1):
-            if messages[index].get("role") == "user" and str(messages[index].get("content") or "").strip():
+            if messages[index].get("role") == "user" and ticket_message_text(messages[index]):
                 return messages[index]
 
     for message in reversed(messages):
-        if message.get("role") == "user" and str(message.get("content") or "").strip():
+        if message.get("role") == "user" and ticket_message_text(message):
             return message
 
     return messages[-1]
