@@ -24,7 +24,7 @@ from groq import AsyncGroq
 
 logger = logging.getLogger(__name__)
 
-QUERY_PLAN_SYSTEM_PROMPT = """Sei il Query Planner LLM di TARA per i Giochi del Mediterraneo Taranto 2026.
+QUERY_PLAN_SYSTEM_PROMPT = """Sei il Query Planner LLM di TALOS per i Giochi del Mediterraneo Taranto 2026.
 Devi restituire solo JSON valido, senza markdown e senza spiegazioni.
 
 Compiti:
@@ -303,15 +303,16 @@ async def generate_grounded_answer(prompt: str, language_code: str) -> str:
     language_name = response_language_name(language_code)
     
     current_system_instruction = (
-        f"Sei TARA, l'assistente ufficiale dei Giochi del Mediterraneo Taranto 2026.\n"
+        f"Sei TALOS, l'assistente ufficiale dei Giochi del Mediterraneo Taranto 2026.\n"
         f"REGOLE ASSOLUTE:\n"
         f"1. Rispondi ESCLUSIVAMENTE con le informazioni fornite nel CONTESTO sotto. NON usare conoscenze personali o esterne.\n"
         f"2. PROIBIZIONE TOTALE: NON fornire mai informazioni su trasporti, bus, pullman, linee urbane o fermate, anche se presenti nel contesto.\n"
         f"3. Se nel contesto si parla di una MASCOTTE (Ionios), e la descrizione visiva riporta un animale marino stilizzato o colorato, CONFERMA che si tratta di Ionios. NON dire che è un delfino o altro se non è scritto nel contesto.\n"
-        f"4. Se l'informazione non è nel contesto, dì chiaramente che non lo sai.\n"
+        f"4. Se l'informazione non è nel contesto, devi dire che non sai rispondere.\n"
         f"5. Rispondi SOLO in {language_name}.\n"
         f"6. NON USARE MAI asterischi (**), grassetto o corsivo. Scrivi solo testo semplice.\n"
-        f"7. Se non capisci la richiesta o non trovi dati utili, non ripetere e non citare mai il testo dell'utente."
+        f"7. Se non capisci la richiesta o non trovi dati utili, non ripetere e non citare mai il testo dell'utente.\n"
+        f"8. Il tuo nome e' TALOS. Se ti viene chiesto chi sei, come ti chiami o qualcosa del genere, rispondi TALOS."
     )
     
     payload = {
@@ -527,7 +528,10 @@ def build_user_prompt(
 
 
 def clean_answer_text(answer: str) -> str:
-    return answer.strip()
+    text = (answer or "").strip()
+    for legacy_name in ("T" + "ARA", "T" + "ara", "t" + "ara"):
+        text = re.sub(rf"\b{re.escape(legacy_name)}\b", "TALOS", text)
+    return text
 
 
 def parse_json_object(json_str: str) -> dict[str, Any]:
@@ -833,8 +837,9 @@ async def translate_operator_conversation(messages: list[dict[str, Any]]) -> lis
         data = parse_json_object(strip_thinking(content).strip())
         translations = data.get("translations") if isinstance(data, dict) else None
         if not isinstance(translations, list):
-            return translated_messages
+            return await translate_operator_conversation_items(translated_messages, readable)
 
+        applied_translations = 0
         for item in translations:
             try:
                 index = int(item.get("index"))
@@ -843,9 +848,28 @@ async def translate_operator_conversation(messages: list[dict[str, Any]]) -> lis
             text = str(item.get("text") or "").strip()
             if text and 0 <= index < len(translated_messages):
                 translated_messages[index]["translated_content"] = text
+                applied_translations += 1
+        if applied_translations == 0:
+            return await translate_operator_conversation_items(translated_messages, readable)
     except Exception as exc:
         logger.warning("operator conversation translation failed: %s", exc)
+        return await translate_operator_conversation_items(translated_messages, readable)
 
+    return translated_messages
+
+
+async def translate_operator_conversation_items(
+    translated_messages: list[dict[str, Any]],
+    readable: list[tuple[int, Any, str]],
+) -> list[dict[str, Any]]:
+    """Fallback translation path for operator conversations when JSON batch parsing fails."""
+    for index, _role, content in readable:
+        if not content or not 0 <= index < len(translated_messages):
+            continue
+        try:
+            translated_messages[index]["translated_content"] = await translate_text(content, "it")
+        except Exception as exc:
+            logger.warning("operator message translation failed: %s", exc)
     return translated_messages
 
 
@@ -863,13 +887,13 @@ async def generate_operator_email_draft(ticket: dict[str, Any]) -> dict[str, str
     )
 
     fallback = {
-        "subject": f"Riscontro alla richiesta TarAI - {domain}",
+        "subject": f"Riscontro alla richiesta T.A.L.O.S. - {domain}",
         "body": (
             "Ciao,\n\n"
-            "abbiamo ricevuto la tua richiesta tramite TarAI e la stiamo gestendo.\n"
+            "abbiamo ricevuto la tua richiesta tramite T.A.L.O.S. e la stiamo gestendo.\n"
             f"Riepilogo: {summary or 'richiesta di assistenza sui Giochi del Mediterraneo Taranto 2026'}.\n\n"
             "Ti ricontatteremo con le informazioni disponibili appena possibile.\n\n"
-            "Cordiali saluti,\nCustomer Care TarAI"
+            "Cordiali saluti,\nCustomer Care T.A.L.O.S."
         ),
     }
 

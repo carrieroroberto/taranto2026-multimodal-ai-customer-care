@@ -8,6 +8,14 @@ CREATE TABLE IF NOT EXISTS operators (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+INSERT INTO operators (name, email, password_hash)
+VALUES (
+    'Operatore',
+    'operatore@talos.it',
+    '$2a$06$.VV5inNW2OX5P8Ws5YAXP.vCtnT3tvPK4AVBR7/ytliDej8LGOMGS'
+)
+ON CONFLICT (email) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS conversations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP DEFAULT NOW()

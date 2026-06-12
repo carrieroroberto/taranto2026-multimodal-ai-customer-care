@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import { chatBotUrl, chatUserUrl, mainLogoUrl } from "../assets/index.js";
 import { DecorativeBackground } from "../components/DecorativeBackground.jsx";
+import { AudioWaveform } from "../components/MessageList.jsx";
 import { ThemeToggle } from "../components/ThemeToggle.jsx";
 import {
   clearOperatorSession,
@@ -50,7 +51,7 @@ export function OperatorDashboardPage() {
   const didInitializeTicketsRef = useRef(false);
   const selectedConversationMessageIdsRef = useRef(new Set());
   const didInitializeSelectedConversationRef = useRef(false);
-  const notificationAudioContextRef = useRef(null);
+  const translatedConversationRef = useRef(null);
 
   const isAuthenticated = Boolean(token);
 
@@ -72,7 +73,6 @@ export function OperatorDashboardPage() {
     document.title = unseenUpdateCount > 0
       ? `(+${unseenUpdateCount}) ${OPERATOR_PAGE_TITLE}`
       : OPERATOR_PAGE_TITLE;
-    updateOperatorAppBadge(unseenUpdateCount);
   }, [unseenUpdateCount]);
 
   useEffect(() => {
@@ -97,27 +97,6 @@ export function OperatorDashboardPage() {
 
     return () => {
       isCancelled = true;
-    };
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) {
-      return undefined;
-    }
-
-    const activateOperatorNotifications = () => {
-      window.removeEventListener("pointerdown", activateOperatorNotifications);
-      window.removeEventListener("keydown", activateOperatorNotifications);
-      prepareOperatorNotificationSound(notificationAudioContextRef);
-      requestOperatorNotificationPermission();
-    };
-
-    window.addEventListener("pointerdown", activateOperatorNotifications, { once: true });
-    window.addEventListener("keydown", activateOperatorNotifications, { once: true });
-
-    return () => {
-      window.removeEventListener("pointerdown", activateOperatorNotifications);
-      window.removeEventListener("keydown", activateOperatorNotifications);
     };
   }, [token]);
 
@@ -297,18 +276,27 @@ export function OperatorDashboardPage() {
         });
         return nextIds;
       });
-      registerOperatorUpdate(newTickets.length, {
-        title: newTickets.length === 1 ? "Nuovo ticket" : "Nuovi ticket",
-        body:
-          newTickets.length === 1
-            ? newTickets[0]?.summary || "E arrivato un nuovo ticket."
-            : `Sono arrivati ${newTickets.length} nuovi ticket.`,
-      });
+      registerOperatorUpdate(newTickets.length);
     }
   }
 
   function handleSelectedTicketRefresh(detail, { notify = false } = {}) {
-    const conversation = Array.isArray(detail?.conversation) ? detail.conversation : [];
+    let effectiveDetail = detail;
+    if (
+      translatedConversationRef.current &&
+      String(detail?.id || "") === String(selectedTicketId || "")
+    ) {
+      const mergedConversation = mergeTranslatedConversation(
+        translatedConversationRef.current,
+        Array.isArray(detail?.conversation) ? detail.conversation : [],
+      );
+      translatedConversationRef.current = mergedConversation;
+      setTranslatedMessages(mergedConversation);
+      effectiveDetail = { ...detail, conversation: mergedConversation };
+    }
+    const conversation = Array.isArray(effectiveDetail?.conversation)
+      ? effectiveDetail.conversation
+      : [];
     const currentMessageIds = new Set(
       conversation.map((message) => String(message?.id || "")).filter(Boolean),
     );
@@ -321,7 +309,7 @@ export function OperatorDashboardPage() {
       );
     });
 
-    setSelectedTicket(detail);
+    setSelectedTicket(effectiveDetail);
     selectedConversationMessageIdsRef.current = currentMessageIds;
 
     if (!didInitializeSelectedConversationRef.current) {
@@ -330,23 +318,15 @@ export function OperatorDashboardPage() {
     }
 
     if (notify && newUserMessages.length > 0) {
-      registerOperatorUpdate(newUserMessages.length, {
-        title: newUserMessages.length === 1 ? "Nuovo messaggio utente" : "Nuovi messaggi utente",
-        body:
-          newUserMessages.length === 1
-            ? "E arrivato un nuovo messaggio nella conversazione aperta."
-            : `Sono arrivati ${newUserMessages.length} nuovi messaggi nella conversazione aperta.`,
-      });
+      registerOperatorUpdate(newUserMessages.length);
     }
   }
 
-  function registerOperatorUpdate(count, notification) {
+  function registerOperatorUpdate(count) {
     if (count <= 0) {
       return;
     }
     setUnseenUpdateCount((currentCount) => currentCount + count);
-    playOperatorNotificationSound(notificationAudioContextRef);
-    showOperatorNotification(notification);
   }
 
   function handleSessionExpired() {
@@ -363,8 +343,6 @@ export function OperatorDashboardPage() {
     const session = await loginOperator(credentials);
     updateSession(session.token, session.operator);
     setUnseenUpdateCount(0);
-    prepareOperatorNotificationSound(notificationAudioContextRef);
-    requestOperatorNotificationPermission();
   }
 
   async function handleLogout() {
@@ -399,7 +377,8 @@ export function OperatorDashboardPage() {
     }
     selectedConversationMessageIdsRef.current = new Set();
     didInitializeSelectedConversationRef.current = false;
-    prepareOperatorNotificationSound(notificationAudioContextRef);
+    translatedConversationRef.current = null;
+    setTranslatedMessages(null);
     setSelectedTicketId(ticketId);
   }
 
@@ -407,6 +386,7 @@ export function OperatorDashboardPage() {
     setSelectedTicketId(null);
     setSelectedTicket(null);
     setTranslatedMessages(null);
+    translatedConversationRef.current = null;
     selectedConversationMessageIdsRef.current = new Set();
     didInitializeSelectedConversationRef.current = false;
   }
@@ -416,7 +396,11 @@ export function OperatorDashboardPage() {
       return;
     }
 
-    const nextStatus = selectedTicket.status === "chiuso" ? "aperto" : "chiuso";
+    if (selectedTicket.status === "chiuso") {
+      return;
+    }
+
+    const nextStatus = "chiuso";
     try {
       await updateTicketStatus(token, selectedTicket.id, nextStatus);
       setSelectedTicket({ ...selectedTicket, status: nextStatus });
@@ -439,7 +423,40 @@ export function OperatorDashboardPage() {
     setError("");
     try {
       const payload = await translateTicketConversation(token, selectedTicket.id);
-      setTranslatedMessages(Array.isArray(payload.messages) ? payload.messages : []);
+      const translatedConversation = normalizeTranslatedConversation(
+        payload,
+        selectedTicket.conversation || [],
+      );
+      if (!translatedConversation.length) {
+        throw new Error("empty translation");
+      }
+      const translationVersion = Date.now();
+      const nextConversation = translatedConversation.map((message) => ({
+        ...message,
+        content: firstNonEmpty(
+          message.display_content,
+          message.translated_content,
+          message.content,
+        ),
+        display_content: firstNonEmpty(
+          message.display_content,
+          message.translated_content,
+          message.content,
+        ),
+        translated_content: null,
+        translation_version: translationVersion,
+      }));
+      translatedConversationRef.current = nextConversation;
+      setTranslatedMessages(nextConversation);
+      setSelectedTicket((currentTicket) => {
+        if (!currentTicket || currentTicket.id !== selectedTicket.id) {
+          return currentTicket;
+        }
+        return {
+          ...currentTicket,
+          conversation: nextConversation,
+        };
+      });
     } catch (_error) {
       setError("Impossibile tradurre la conversazione.");
     } finally {
@@ -535,6 +552,7 @@ export function OperatorDashboardPage() {
         isOpen={Boolean(selectedTicketId)}
         isTranslating={isTranslating}
         ticket={selectedTicket}
+        theme={theme}
         translatedMessages={translatedMessages}
         onClose={closeTicketModal}
         onMailTo={handleMailTo}
@@ -598,7 +616,7 @@ function OperatorTopbar({
       <div className="topbar-inner mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <h1 className="brand-heading truncate">T.A.L.O.S | Mediterranean Games</h1>
+            <h1 className="brand-heading truncate">T.A.L.O.S | Giochi del Mediterraneo</h1>
             <p className="brand-kicker">Taranto 2026 AI Live Operator Support</p>
           </div>
         </div>
@@ -847,6 +865,7 @@ function TicketDetailModal({
   isOpen,
   isTranslating,
   ticket,
+  theme,
   translatedMessages,
   onClose,
   onMailTo,
@@ -878,7 +897,13 @@ function TicketDetailModal({
   }
 
   return createPortal(
-    <div className="image-lightbox operator-ticket-lightbox" role="dialog" aria-modal="true" onClick={onClose}>
+    <div
+      className="app-surface operator-surface image-lightbox operator-ticket-lightbox"
+      data-theme={theme}
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
       <button className="image-lightbox-close" type="button" aria-label="Chiudi ticket" onClick={onClose}>
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
@@ -918,40 +943,49 @@ function TicketDetail({
   onStatusToggle,
   onTranslate,
 }) {
-  const messages = translatedMessages || ticket.conversation || [];
+  const messages = translatedMessages?.length ? translatedMessages : ticket.conversation || [];
+  const domainLabel = formatTitleCase(ticket.domain || "Informazioni generali");
+  const priorityLabel = formatUpperLabel(ticket.priority || "media");
+  const statusLabel = formatUpperLabel(ticket.status || "aperto");
+  const isClosed = ticket.status === "chiuso";
 
   return (
     <>
       <div className="operator-detail-header">
         <div>
-          <p className="operator-kicker">Ticket selezionato</p>
-          <h2>{ticket.domain || "Informazioni generali"}</h2>
+          <p className="operator-kicker">DOMINIO</p>
+          <h2>{domainLabel}</h2>
           <span>{formatDate(ticket.created_at)}</span>
         </div>
         <div className="operator-detail-actions">
-          <button type="button" onClick={onStatusToggle}>
-            Segna come {ticket.status === "chiuso" ? "aperto" : "chiuso"}
+          <button
+            className={isClosed ? "operator-close-ticket-button operator-close-ticket-button-disabled" : "operator-close-ticket-button"}
+            type="button"
+            disabled={isClosed}
+            onClick={onStatusToggle}
+          >
+            {isClosed ? "Chiuso" : "Chiudi"}
           </button>
-          <button type="button" disabled={isTranslating} onClick={onTranslate}>
-            {isTranslating ? "Traduzione" : "Traduci chat"}
+          <button className="operator-translate-ticket-button" type="button" disabled={isTranslating} onClick={onTranslate}>
+            Traduci
           </button>
-          <button className="operator-primary-button" type="button" disabled={isDraftingEmail} onClick={onMailTo}>
-            {isDraftingEmail ? "Bozza email" : "Rispondi via email"}
+          <button className="operator-primary-button operator-reply-ticket-button" type="button" disabled={isDraftingEmail} onClick={onMailTo}>
+            {isDraftingEmail ? "Bozza" : "Rispondi"}
           </button>
         </div>
       </div>
 
       <div className="operator-ticket-summary">
         <div>
-          <span>Priorita</span>
-          <strong>{ticket.priority || "media"}</strong>
+          <span>Priorità</span>
+          <strong>{priorityLabel}</strong>
         </div>
         <div>
           <span>Stato</span>
-          <strong>{ticket.status || "aperto"}</strong>
+          <strong>{statusLabel}</strong>
         </div>
         <div>
-          <span>Email utente</span>
+          <span>Email Utente</span>
           <strong>{ticket.user_email}</strong>
         </div>
       </div>
@@ -961,7 +995,10 @@ function TicketDetail({
       <div className="operator-conversation">
         {messages.length ? (
           messages.map((message) => (
-            <OperatorConversationMessage key={message.id} message={message} />
+            <OperatorConversationMessage
+              key={`${message.id || "message"}-${message.translation_version || "original"}`}
+              message={message}
+            />
           ))
         ) : (
           <OperatorEmptyState title="Conversazione vuota" text="Non sono presenti messaggi associati al ticket." />
@@ -973,18 +1010,20 @@ function TicketDetail({
 
 function OperatorConversationMessage({ message }) {
   const isBot = message.role === "bot";
-  const content = message.translated_content ?? message.content;
+  const content = message.display_content ?? message.translated_content ?? message.content;
+  const hasMedia = Boolean(message.media_url);
   const mediaLabel =
     !content && message.type === "image"
       ? "Immagine inviata dall'utente"
       : !content && message.type === "audio"
         ? "Audio inviato dall'utente"
         : "";
+  const visibleText = content || (!hasMedia ? mediaLabel || "Messaggio senza contenuto testuale." : "");
 
   return (
     <article className={isBot ? "operator-chat-message-block" : "operator-chat-message-block operator-chat-message-block-user"}>
       <time className="operator-chat-timestamp" dateTime={message.created_at || ""}>
-        {isBot ? "TALOS" : "Utente"} - {formatDate(message.created_at)}
+        {formatDate(message.created_at)}
       </time>
       <div className={isBot ? "operator-chat-turn" : "operator-chat-turn operator-chat-turn-user"}>
         {!isBot ? null : (
@@ -994,12 +1033,19 @@ function OperatorConversationMessage({ message }) {
         )}
         <div className="operator-chat-stack">
           <div className={isBot ? "chat-bubble chat-bubble-assistant operator-chat-bubble" : "chat-bubble chat-bubble-user operator-chat-bubble"}>
-            <p>{content || mediaLabel || "Messaggio senza contenuto testuale."}</p>
+            {visibleText ? <p>{visibleText}</p> : null}
             {message.media_url && message.type === "image" ? (
               <img className="operator-message-media" src={message.media_url} alt="" />
             ) : null}
             {message.media_url && message.type === "audio" ? (
-              <audio className="operator-message-audio" src={message.media_url} controls />
+              <AudioWaveform
+                audio={{
+                  url: message.media_url,
+                  durationMs: message.duration_ms || message.durationMs || 0,
+                  waveform: message.waveform || null,
+                }}
+                label="Messaggio audio"
+              />
             ) : null}
           </div>
         </div>
@@ -1022,8 +1068,103 @@ function OperatorEmptyState({ title, text }) {
   );
 }
 
+function normalizeTranslatedConversation(payload, fallbackMessages = []) {
+  const rawMessages = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.messages)
+      ? payload.messages
+      : Array.isArray(payload?.conversation)
+        ? payload.conversation
+        : [];
+
+  if (!rawMessages.length) {
+    return [];
+  }
+
+  const fallbackById = new Map(
+    fallbackMessages
+      .filter((message) => message?.id)
+      .map((message) => [String(message.id), message]),
+  );
+
+  return rawMessages.map((message, index) => {
+    const fallback =
+      fallbackById.get(String(message?.id || "")) ||
+      fallbackMessages[index] ||
+      {};
+    const translatedContent =
+      firstNonEmpty(
+        message?.display_content,
+        message?.translated_content,
+        message?.translatedContent,
+        message?.translation,
+        message?.translated_text,
+      );
+
+    return {
+      ...fallback,
+      ...message,
+      display_content: translatedContent || message?.content || fallback.content || "",
+      translated_content: translatedContent || message?.content || fallback.content || "",
+    };
+  });
+}
+
+function mergeTranslatedConversation(translatedMessages = [], latestMessages = []) {
+  if (!translatedMessages.length) {
+    return latestMessages;
+  }
+  if (!latestMessages.length) {
+    return translatedMessages;
+  }
+
+  const translatedById = new Map(
+    translatedMessages
+      .filter((message) => message?.id)
+      .map((message) => [String(message.id), message]),
+  );
+
+  return latestMessages.map((latestMessage) => {
+    const translatedMessage = translatedById.get(String(latestMessage?.id || ""));
+    if (!translatedMessage) {
+      return latestMessage;
+    }
+
+    return {
+      ...latestMessage,
+      ...translatedMessage,
+      media_url: latestMessage.media_url ?? translatedMessage.media_url,
+      sources: latestMessage.sources ?? translatedMessage.sources,
+      satisfaction: latestMessage.satisfaction ?? translatedMessage.satisfaction,
+      ticket_opened: latestMessage.ticket_opened ?? translatedMessage.ticket_opened,
+      created_at: latestMessage.created_at ?? translatedMessage.created_at,
+    };
+  });
+}
+
+function firstNonEmpty(...values) {
+  return values
+    .map((value) => String(value || "").trim())
+    .find(Boolean) || "";
+}
+
 function normalizedLabel(value, fallback) {
   return String(value || fallback).trim().toLowerCase();
+}
+
+function formatTitleCase(value) {
+  return String(value || "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLocaleLowerCase("it-IT")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toLocaleUpperCase("it-IT") + word.slice(1))
+    .join(" ");
+}
+
+function formatUpperLabel(value) {
+  return String(value || "").trim().toLocaleUpperCase("it-IT");
 }
 
 function priorityRank(priority) {
@@ -1079,108 +1220,6 @@ function formatOperatorName(name) {
 function openMailTo(email, subject, body) {
   const href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject || "")}&body=${encodeURIComponent(body || "")}`;
   window.location.href = href;
-}
-
-function prepareOperatorNotificationSound(audioContextRef) {
-  try {
-    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextConstructor) {
-      return;
-    }
-
-    const audioContext = audioContextRef.current || new AudioContextConstructor();
-    audioContextRef.current = audioContext;
-    if (audioContext.state === "suspended") {
-      audioContext.resume().catch(() => {});
-    }
-  } catch (_error) {
-    // Alcuni browser bloccano l'audio finche non c'e una gesture utente valida.
-  }
-}
-
-function playOperatorNotificationSound(audioContextRef) {
-  try {
-    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextConstructor) {
-      return;
-    }
-
-    const audioContext = audioContextRef.current || new AudioContextConstructor();
-    audioContextRef.current = audioContext;
-
-    const playTone = () => {
-      const oscillator = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      const startTime = audioContext.currentTime;
-
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(880, startTime);
-      oscillator.frequency.exponentialRampToValueAtTime(660, startTime + 0.18);
-      gain.gain.setValueAtTime(0.0001, startTime);
-      gain.gain.exponentialRampToValueAtTime(0.055, startTime + 0.018);
-      gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.2);
-
-      oscillator.connect(gain);
-      gain.connect(audioContext.destination);
-      oscillator.start(startTime);
-      oscillator.stop(startTime + 0.22);
-    };
-
-    if (audioContext.state === "suspended") {
-      audioContext.resume().then(playTone).catch(() => {});
-      return;
-    }
-
-    playTone();
-  } catch (error) {
-    console.warn("Suono notifica non disponibile.", error);
-  }
-}
-
-function requestOperatorNotificationPermission() {
-  if (typeof window === "undefined" || !("Notification" in window)) {
-    return;
-  }
-  if (window.Notification.permission === "default") {
-    window.Notification.requestPermission().catch(() => {});
-  }
-}
-
-function showOperatorNotification({ title, body } = {}) {
-  if (typeof window === "undefined" || !("Notification" in window)) {
-    return;
-  }
-  if (window.Notification.permission !== "granted") {
-    return;
-  }
-
-  const notification = new window.Notification(title || "Aggiornamento TarAI", {
-    body: body || "Sono disponibili nuovi aggiornamenti.",
-    tag: "tarai-operator-updates",
-    silent: true,
-  });
-  notification.onclick = () => {
-    window.focus();
-    notification.close();
-  };
-}
-
-function updateOperatorAppBadge(count) {
-  if (typeof navigator === "undefined") {
-    return;
-  }
-
-  try {
-    if (count > 0 && "setAppBadge" in navigator) {
-      navigator.setAppBadge(count)?.catch?.(() => {});
-      return;
-    }
-    if (count <= 0 && "clearAppBadge" in navigator) {
-      navigator.clearAppBadge()?.catch?.(() => {});
-    }
-  } catch (_error) {
-    // Il badge PWA non e supportato da tutti i browser.
-  }
 }
 
 function isUnauthorized(error) {

@@ -2797,9 +2797,13 @@
 }
 
 .operator-ticket-modal {
+  position: relative;
+  z-index: 1;
   border: 1px solid var(--operator-panel-border);
-  background: var(--operator-modal-bg);
-  color: var(--app-text);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(235, 248, 253, 0.94)),
+    var(--message-panel-bg, #ffffff);
+  color: #0f172a;
   box-shadow:
     inset 0 1px 0 var(--operator-panel-highlight),
     0 30px 80px rgba(2, 6, 23, 0.42),
@@ -2807,7 +2811,33 @@
 }
 
 .app-surface[data-theme="dark"] .operator-ticket-modal {
-  background: var(--operator-modal-bg);
+  background:
+    linear-gradient(135deg, rgba(11, 42, 62, 0.96), rgba(5, 20, 33, 0.96)),
+    var(--message-panel-bg, #061826);
+  color: #eaf7ff;
+}
+
+.operator-ticket-lightbox {
+  background: rgba(2, 6, 23, 0.68);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.operator-ticket-lightbox[data-theme="dark"] {
+  background: rgba(2, 6, 23, 0.68);
+}
+
+.operator-ticket-lightbox .image-lightbox-close {
+  border-color: rgba(8, 47, 73, 0.18);
+  background: rgba(255, 255, 255, 0.48);
+  color: var(--brand-blue);
+  box-shadow: 0 14px 30px rgba(8, 47, 73, 0.16);
+}
+
+.operator-ticket-lightbox[data-theme="dark"] .image-lightbox-close {
+  border-color: rgba(224, 242, 254, 0.28);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .operator-detail-header {
@@ -2816,16 +2846,122 @@
   padding-bottom: 0.9rem;
 }
 
+.operator-ticket-modal .operator-detail-header h2 {
+  color: inherit;
+}
+
+.operator-ticket-modal .operator-kicker {
+  color: var(--brand-kicker);
+}
+
 .operator-detail-header span,
 .operator-summary-text,
 .operator-empty-state span {
   color: var(--operator-card-muted);
 }
 
+.operator-ticket-modal .operator-detail-header span {
+  color: var(--feedback-text);
+}
+
 .operator-detail-actions button,
 .operator-primary-button,
 .operator-logout-button {
   font-weight: 700;
+}
+
+.operator-ticket-modal .operator-detail-actions button {
+  border: 1px solid var(--theme-toggle-border);
+  background: var(--theme-toggle-bg);
+  color: var(--theme-toggle-text);
+  font-weight: 700;
+  box-shadow: var(--composer-action-shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.operator-ticket-modal .operator-detail-actions button:hover {
+  background: var(--theme-toggle-hover);
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-close-ticket-button {
+  border-color: rgba(220, 38, 38, 0.46);
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-close-ticket-button:hover {
+  background: rgba(220, 38, 38, 0.18);
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-close-ticket-button-disabled,
+.operator-ticket-modal .operator-detail-actions .operator-close-ticket-button-disabled:hover {
+  border-color: var(--operator-status-closed-border);
+  background: var(--operator-status-closed-bg);
+  color: var(--operator-status-closed-text);
+  filter: none;
+  opacity: 0.78;
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-reopen-ticket-button {
+  border-color: rgba(2, 132, 199, 0.38);
+  background: rgba(224, 242, 254, 0.82);
+  color: var(--brand-blue);
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-primary-button {
+  border-color: rgba(240, 90, 36, 0.52);
+  background: #f05a24;
+  color: #ffffff;
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-primary-button:hover {
+  background: #d94617;
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button {
+  border-color: var(--operator-status-open-border);
+  background: var(--operator-status-open-bg);
+  color: var(--operator-status-open-text);
+}
+
+.operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button:hover {
+  background: var(--operator-status-open-bg);
+  filter: brightness(0.97);
+}
+
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-close-ticket-button {
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(127, 29, 29, 0.34);
+  color: #fecaca;
+}
+
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-close-ticket-button:hover {
+  background: rgba(153, 27, 27, 0.48);
+}
+
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-close-ticket-button-disabled,
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-close-ticket-button-disabled:hover {
+  border-color: var(--operator-status-closed-border);
+  background: var(--operator-status-closed-bg);
+  color: var(--operator-status-closed-text);
+}
+
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-reopen-ticket-button {
+  border-color: rgba(125, 211, 252, 0.34);
+  background: rgba(14, 116, 144, 0.28);
+  color: #d8f3ff;
+}
+
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button {
+  border-color: var(--operator-status-open-border);
+  background: var(--operator-status-open-bg);
+  color: var(--operator-status-open-text);
+}
+
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button:hover {
+  background: var(--operator-status-open-bg);
+  filter: brightness(1.08);
 }
 
 .operator-logout-button {
@@ -2855,6 +2991,9 @@
 
 .operator-ticket-summary span {
   color: var(--operator-card-muted);
+  font-size: 0.8rem;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .operator-ticket-summary strong,
@@ -2866,6 +3005,12 @@
   border-left: 4px solid var(--focus-blue);
   font-size: 0.96rem;
   font-weight: 500;
+  color: inherit;
+}
+
+.operator-ticket-modal .operator-summary-text {
+  background: var(--assistant-bubble-bg);
+  color: var(--assistant-bubble-text);
 }
 
 .operator-message-bot {
@@ -2894,8 +3039,12 @@
   overflow-x: hidden;
   overflow-y: auto;
   gap: 1rem;
+  border: 1px solid var(--assistant-bubble-border);
+  border-radius: 22px;
+  background: var(--message-panel-bg, rgba(255, 255, 255, 0.9));
   margin-right: -0.35rem;
-  padding: 0.15rem 0.35rem 0.15rem 0;
+  padding: 1rem 0.8rem 1rem 1rem;
+  box-shadow: inset 0 1px 0 var(--chat-header-highlight);
 }
 
 .operator-chat-message-block {
@@ -3218,18 +3367,71 @@
 
   .operator-ticket-modal {
     width: min(94vw, 560px);
-    max-height: 86vh;
-    padding: 0.95rem;
+    height: min(94vh, 100%);
+    max-height: 94vh;
+    gap: 0.48rem;
+    padding: 0.65rem;
+  }
+
+  .operator-ticket-modal .operator-detail-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: flex-start;
+    gap: 0.42rem;
+    padding-bottom: 0.48rem;
+  }
+
+  .operator-ticket-modal .operator-detail-actions {
+    width: 100%;
+    justify-content: flex-end;
+    gap: 0.35rem;
+  }
+
+  .operator-ticket-modal .operator-detail-actions button {
+    min-height: 2.2rem;
+    padding: 0 0.68rem;
+    font-size: 0.78rem;
+  }
+
+  .operator-ticket-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .operator-ticket-summary div {
+    min-width: 0;
+    border-radius: 14px;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .operator-ticket-summary span {
+    font-size: 0.68rem;
+  }
+
+  .operator-ticket-summary strong {
+    overflow: hidden;
+    font-size: 0.76rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .operator-ticket-modal .operator-summary-text {
+    max-height: 3.2rem;
+    overflow: auto;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.82rem;
+    line-height: 1.32;
   }
 
   .operator-ticket-modal .operator-conversation {
-    min-height: 260px;
+    flex: 1 1 0;
+    min-height: 0;
     margin-right: -0.25rem;
-    padding-right: 0.25rem;
+    padding: 0.65rem 0.45rem 0.65rem 0.65rem;
   }
 
   .operator-chat-stack {
-    max-width: calc(100% - 3.25rem);
+    max-width: min(88%, calc(100% - 3rem));
   }
 
   .operator-detail-header {

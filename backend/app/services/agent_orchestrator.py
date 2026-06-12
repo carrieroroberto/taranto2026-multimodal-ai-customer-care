@@ -56,12 +56,12 @@ SOURCE_STOP_TERMS = {
     "delle", "di", "domanda", "essere", "giochi", "gli", "help", "il", "in",
     "informazione", "informazioni", "io", "la", "le", "mediterraneo",
     "mediterranei", "momento", "non", "oggi", "per", "posso", "preciso",
-    "questa", "questo", "risponderti", "sicurezza", "sono", "su", "tara",
+    "questa", "questo", "risponderti", "sicurezza", "sono", "su", "talos",
     "taranto", "ti", "tuo", "ufficiale", "un", "una",
 }
 
 SERVICE_ANSWER_PATTERNS = (
-    "ciao sono tara",
+    "ciao sono talos",
     "come posso aiutarti",
     "come posso aiutarla",
     "how can i help",

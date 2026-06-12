@@ -18,3 +18,5 @@ dist/
 agent.md
 BACKEND_HANDOFF.md
 TODO.md
+backend/data/uploads/
+backend/data/sessions/

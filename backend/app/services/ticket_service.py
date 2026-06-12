@@ -102,7 +102,6 @@ EVENT_RELATED_TERMS = (
     "giochi",
     "mediterraneo",
     "taranto",
-    "tara",
     "stadio",
     "palazzetto",
     "pala",

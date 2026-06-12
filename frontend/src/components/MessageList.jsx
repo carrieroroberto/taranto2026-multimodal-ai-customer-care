@@ -450,7 +450,7 @@ function isServiceAnswerText(text) {
   }
 
   return [
-    "ciao sono tara",
+    "ciao sono talos",
     "come posso aiutarti",
     "how can i help",
     "how may i help",
@@ -515,7 +515,7 @@ function getFaviconUrl(url) {
   }
 }
 
-function AudioWaveform({ audio, label }) {
+export function AudioWaveform({ audio, label }) {
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [durationMs, setDurationMs] = useState(audio?.durationMs || 0);

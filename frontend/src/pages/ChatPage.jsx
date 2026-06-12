@@ -39,6 +39,7 @@ const initialMessages = [
 ];
 
 const THEME_STORAGE_KEY = "tarai-theme";
+const SUPPORT_EMAIL_STORAGE_KEY = "tarai-support-email";
 const TICKET_THINKING_MIN_MS = 450;
 
 export function ChatPage() {
@@ -79,6 +80,10 @@ export function ChatPage() {
         const persistedMessages = restorePersistedEscalationState(
           payload.messages.map(mapPersistedMessage),
         );
+        const persistedSupportEmail = findLatestSupportEmail(persistedMessages);
+        if (persistedSupportEmail) {
+          storeSupportEmail(persistedSupportEmail);
+        }
         
         if (persistedMessages.length > 0) {
           setMessages((currentMessages) => {
@@ -314,6 +319,7 @@ export function ChatPage() {
         });
 
         await persistedUserEmailPromise;
+        storeSupportEmail(supportEmail);
 
         // RESET IMMEDIATO STATO ESCALATION
         setIsEscalating(false); 
@@ -330,7 +336,10 @@ export function ChatPage() {
           isError: false,
           conversationId: ticketResponse.ticket?.conversation_id || conversationId,
           feedbackDisabled: true,
+          escalationFlowFor: null,
+          feedbackSupportFor: null,
         });
+        patchMessage(userMessage.id, { escalationFlowFor: null });
         await persistConversationMessageQuietly(pendingMessage, {
           role: "assistant",
           text: successText,
@@ -524,6 +533,100 @@ export function ChatPage() {
     }
   }
 
+  async function submitStoredEmailTicket(feedbackTarget, supportEmail) {
+    const requestLocale = locale;
+    const pendingMessage = createMessage("assistant", "", true);
+    const escalationFlowFor = feedbackTarget?.id || null;
+    pendingMessage.escalationFlowFor = escalationFlowFor;
+    pendingMessage.feedbackDisabled = true;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setShouldScroll(true);
+    setMessages((prev) => [...prev, pendingMessage]);
+    setIsSendingTicket(true);
+
+    try {
+      await wait(TICKET_THINKING_MIN_MS);
+
+      if (controller.signal.aborted) {
+        const stoppedText = t.stoppedResponse;
+        patchMessage(pendingMessage.id, {
+          text: stoppedText,
+          isLoading: false,
+          isError: true,
+        });
+        await persistConversationMessageQuietly(pendingMessage, {
+          role: "assistant",
+          text: stoppedText,
+        });
+        return;
+      }
+
+      const lastBotWithConv = [...messages].reverse().find((m) => m.conversationId);
+      const conversationId =
+        feedbackTarget?.conversationId ||
+        lastBotWithConv?.conversationId ||
+        sessionIdRef.current;
+      const escalatedMessageId = feedbackTarget?.persistedId || null;
+
+      const ticketResponse = await sendTicket({
+        conversationId,
+        escalatedMessageId,
+        userEmail: supportEmail,
+        language: requestLocale,
+        signal: controller.signal,
+      });
+
+      setIsEscalating(false);
+
+      const successText = ticketResponse.message;
+      if (!successText) {
+        throw new Error(t.ticketError || "Impossibile inviare il ticket.");
+      }
+
+      patchMessage(pendingMessage.id, {
+        text: successText,
+        isLoading: false,
+        isError: false,
+        conversationId: ticketResponse.ticket?.conversation_id || conversationId,
+        feedbackDisabled: true,
+        escalationFlowFor: null,
+        feedbackSupportFor: null,
+      });
+      await persistConversationMessageQuietly(pendingMessage, {
+        role: "assistant",
+        text: successText,
+      });
+
+      if (feedbackTarget) {
+        patchMessage(feedbackTarget.id, { feedbackLocked: true });
+      }
+    } catch (error) {
+      console.error("Stored email ticket submission failed", error);
+      const errorText =
+        error.name === "AbortError"
+          ? t.stoppedResponse
+          : getTicketErrorMessage(error, t);
+      patchMessage(pendingMessage.id, {
+        text: errorText,
+        isLoading: false,
+        isError: true,
+        feedbackDisabled: true,
+      });
+      await persistConversationMessageQuietly(pendingMessage, {
+        role: "assistant",
+        text: errorText,
+      });
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setIsSendingTicket(false);
+    }
+  }
+
   function patchMessage(messageId, patch) {
     setMessages((currentMessages) =>
       currentMessages.map((message) =>
@@ -632,6 +735,13 @@ export function ChatPage() {
       
       // ESCALATION SU FEEDBACK NEGATIVO - Solo se è l'ultimo messaggio bot
       if (nextSatisfaction === false) {
+        const knownSupportEmail = findLatestSupportEmail(messages) || getStoredSupportEmail();
+        if (isValidEmail(knownSupportEmail)) {
+          storeSupportEmail(knownSupportEmail);
+          await submitStoredEmailTicket(message, knownSupportEmail);
+          return;
+        }
+
         setIsEscalating(true);
         const apologyText =
           t.feedbackSupportPrompt ||
@@ -813,6 +923,30 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 }
 
+function getStoredSupportEmail() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.localStorage.getItem(SUPPORT_EMAIL_STORAGE_KEY) || "";
+}
+
+function storeSupportEmail(value) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const email = String(value || "").trim();
+  if (isValidEmail(email)) {
+    window.localStorage.setItem(SUPPORT_EMAIL_STORAGE_KEY, email);
+  }
+}
+
+function findLatestSupportEmail(messages) {
+  const emailMessage = [...messages]
+    .reverse()
+    .find((message) => message?.role === "user" && isValidEmail(message.text));
+  return emailMessage ? String(emailMessage.text || "").trim() : "";
+}
+
 function getTicketErrorMessage(error, t) {
   const message = String(error?.message || "");
   if (/invalid email/i.test(message)) {
@@ -914,6 +1048,13 @@ function restorePersistedEscalationState(messages) {
       return nextMessage;
     }
 
+    if (message.role === "assistant" && isTicketSuccessText(message.text)) {
+      nextMessage.feedbackDisabled = true;
+      activeFlowId = null;
+      latestFeedbackTarget = null;
+      return nextMessage;
+    }
+
     if (activeFlowId && message.id !== activeFlowId) {
       nextMessage.escalationFlowFor = activeFlowId;
       if (message.role === "assistant") {
@@ -984,6 +1125,17 @@ function isEscalationText(text) {
     normalized.includes("ecrivez votre adresse e mail") ||
     normalized.includes("ingresa tu correo") ||
     normalized.includes("saisissez votre e-mail")
+  );
+}
+
+function isTicketSuccessText(text) {
+  const normalized = normalizeServiceText(text);
+  return (
+    normalized.includes("richiesta inviata con successo") ||
+    normalized.includes("request sent successfully") ||
+    normalized.includes("solicitud enviada correctamente") ||
+    normalized.includes("demande envoyee avec succes") ||
+    normalized.includes("ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ù†Ø¬Ø§Ø­")
   );
 }
 
