@@ -902,7 +902,7 @@ async def generate_operator_email_draft(
     """Generate a concise email draft for the operator in the user's language."""
     user_email = str(ticket.get("user_email") or "").strip()
     operator_name = str((operator or {}).get("name") or "Operatore").strip() or "Operatore"
-    ticket_code = str(ticket.get("id") or "").split("-")[0][:8] or "ticket"
+    ticket_code = (str(ticket.get("id") or "").split("-")[0][:8] or "ticket").upper()
     summary = str(ticket.get("summary") or "").strip()
     domain = str(ticket.get("domain") or "informazioni generali").strip()
     priority = str(ticket.get("priority") or "media").strip()
@@ -932,7 +932,8 @@ async def generate_operator_email_draft(
                     "Genera il testo personalizzato per una bozza email customer-care TALOS.\n"
                     "Rileva la lingua dell'utente dalla cronologia, dando priorita all'ultimo messaggio utente leggibile.\n"
                     "Scrivi il testo personalizzato nella stessa lingua dell'utente. Se la lingua non e' chiara, usa italiano.\n"
-                    "Il testo deve essere personalizzato in base alla conversazione dando una possibile soluzione. NON nominare mai TALOS, l'utente, l'operatore, ma DEVI scrivere come se sei tu stesso l'operatore che sta rispondendo all'utente e non in terza persona. Rendi la risposta coerente per continuare il messaggio introduttivo e di apertura della mail.\n"
+                    "Il testo deve essere personalizzato in base alla conversazione dando una possibile soluzione.\n"
+                    "NON devi mai nominare TALOS, l'utente, l'operatore nella risposta, ma DEVI scrivere come se sei tu stesso l'operatore umano che sta rispondendo all'utente e quindi non in terza persona. Rendi la risposta coerente per continuare il messaggio introduttivo e di apertura della mail.\n"
                     "Mantieni T.A.L.O.S. invariato e non tradurre il nome/acronimo.\n"
                     "Non includere saluti, oggetto, firma, markdown o template completo.\n"
                     "Non iniziare con formule equivalenti a 'In merito alla tua richiesta' o 'Regarding your request'.\n"

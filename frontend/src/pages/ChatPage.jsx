@@ -308,7 +308,9 @@ export function ChatPage() {
 
         const lastBotWithConv = [...messages].reverse().find(m => m.conversationId);
         const conversationId = lastBotWithConv?.conversationId || sessionIdRef.current;
-        const escalatedMessageId = feedbackTarget?.persistedId || null;
+        const escalatedMessageId =
+          feedbackTarget?.persistedId ||
+          findEscalationPersistedMessageId(messages, escalationFlowFor);
 
         const ticketResponse = await sendTicket({
           conversationId,
@@ -413,7 +415,31 @@ export function ChatPage() {
       }
 
       if (response.needs_email_for_ticket) {
-        setIsEscalating(true);
+        const knownSupportEmail = getKnownSupportEmail(messages);
+        if (isValidEmail(knownSupportEmail)) {
+          storeSupportEmail(knownSupportEmail);
+          patchMessage(pendingMessage.id, {
+            text: "",
+            isLoading: true,
+            feedbackDisabled: true,
+            escalationFlowFor: null,
+            persistedId: null,
+          });
+          await submitStoredEmailTicket(
+            {
+              ...userMessage,
+              persistedId: response.user_message_id || null,
+              conversationId: response.conversation_id || null,
+            },
+            knownSupportEmail,
+            {
+              pendingMessage,
+              deletePersistedMessageIds: response.bot_message_id ? [response.bot_message_id] : [],
+            },
+          );
+        } else {
+          setIsEscalating(true);
+        }
       }
     } catch (error) {
       if (error.name === "AbortError") {
@@ -502,7 +528,31 @@ export function ChatPage() {
       }
 
       if (response.needs_email_for_ticket) {
-        setIsEscalating(true);
+        const knownSupportEmail = getKnownSupportEmail(messages);
+        if (isValidEmail(knownSupportEmail)) {
+          storeSupportEmail(knownSupportEmail);
+          patchMessage(pendingMessage.id, {
+            text: "",
+            isLoading: true,
+            feedbackDisabled: true,
+            escalationFlowFor: null,
+            persistedId: null,
+          });
+          await submitStoredEmailTicket(
+            {
+              ...userMessage,
+              persistedId: response.user_message_id || null,
+              conversationId: response.conversation_id || null,
+            },
+            knownSupportEmail,
+            {
+              pendingMessage,
+              deletePersistedMessageIds: response.bot_message_id ? [response.bot_message_id] : [],
+            },
+          );
+        } else {
+          setIsEscalating(true);
+        }
       }
 
       if (!isImage) {
@@ -533,9 +583,9 @@ export function ChatPage() {
     }
   }
 
-  async function submitStoredEmailTicket(feedbackTarget, supportEmail) {
+  async function submitStoredEmailTicket(feedbackTarget, supportEmail, options = {}) {
     const requestLocale = locale;
-    const pendingMessage = createMessage("assistant", "", true);
+    const pendingMessage = options.pendingMessage || createMessage("assistant", "", true);
     const escalationFlowFor = feedbackTarget?.id || null;
     pendingMessage.escalationFlowFor = escalationFlowFor;
     pendingMessage.feedbackDisabled = true;
@@ -544,7 +594,9 @@ export function ChatPage() {
     abortControllerRef.current = controller;
 
     setShouldScroll(true);
-    setMessages((prev) => [...prev, pendingMessage]);
+    if (!options.pendingMessage) {
+      setMessages((prev) => [...prev, pendingMessage]);
+    }
     setIsSendingTicket(true);
 
     try {
@@ -562,6 +614,13 @@ export function ChatPage() {
           text: stoppedText,
         });
         return;
+      }
+
+      if (Array.isArray(options.deletePersistedMessageIds) && options.deletePersistedMessageIds.length) {
+        await deleteConversationMessages({
+          sessionId: sessionIdRef.current,
+          messageIds: options.deletePersistedMessageIds,
+        });
       }
 
       const lastBotWithConv = [...messages].reverse().find((m) => m.conversationId);
@@ -735,7 +794,7 @@ export function ChatPage() {
       
       // ESCALATION SU FEEDBACK NEGATIVO - Solo se è l'ultimo messaggio bot
       if (nextSatisfaction === false) {
-        const knownSupportEmail = findLatestSupportEmail(messages) || getStoredSupportEmail();
+        const knownSupportEmail = getKnownSupportEmail(messages);
         if (isValidEmail(knownSupportEmail)) {
           storeSupportEmail(knownSupportEmail);
           await submitStoredEmailTicket(message, knownSupportEmail);
@@ -947,6 +1006,18 @@ function findLatestSupportEmail(messages) {
   return emailMessage ? String(emailMessage.text || "").trim() : "";
 }
 
+function getKnownSupportEmail(messages) {
+  return findLatestSupportEmail(messages) || getStoredSupportEmail();
+}
+
+function findEscalationPersistedMessageId(messages, flowId) {
+  if (!flowId) {
+    return null;
+  }
+  const flowMessage = messages.find((message) => message.id === flowId);
+  return flowMessage?.persistedId || null;
+}
+
 function getTicketErrorMessage(error, t) {
   const message = String(error?.message || "");
   if (/invalid email/i.test(message)) {
@@ -1046,6 +1117,18 @@ function restorePersistedEscalationState(messages) {
     ) {
       activeFlowId = latestFeedbackTarget.id;
       nextMessage.feedbackSupportFor = activeFlowId;
+      nextMessage.escalationFlowFor = activeFlowId;
+      nextMessage.feedbackDisabled = true;
+      return nextMessage;
+    }
+
+    if (
+      message.role === "assistant" &&
+      message.persistedId &&
+      isEscalationText(message.text) &&
+      !latestFeedbackTarget
+    ) {
+      activeFlowId = message.id;
       nextMessage.escalationFlowFor = activeFlowId;
       nextMessage.feedbackDisabled = true;
       return nextMessage;
