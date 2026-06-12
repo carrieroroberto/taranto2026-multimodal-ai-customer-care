@@ -308,7 +308,7 @@ async def generate_grounded_answer(prompt: str, language_code: str) -> str:
         f"1. Rispondi ESCLUSIVAMENTE con le informazioni fornite nel CONTESTO sotto. NON usare conoscenze personali o esterne.\n"
         f"2. PROIBIZIONE TOTALE: NON fornire mai informazioni su trasporti, bus, pullman, linee urbane o fermate, anche se presenti nel contesto.\n"
         f"3. Se nel contesto si parla di una MASCOTTE (Ionios), e la descrizione visiva riporta un animale marino stilizzato o colorato, CONFERMA che si tratta di Ionios. NON dire che è un delfino o altro se non è scritto nel contesto.\n"
-        f"4. Se l'informazione non è nel contesto, devi dire che non sai rispondere.\n"
+        f"4. Se l'informazione non è nel contesto, non puoi rispondere ma scusati a tal proposito e NON ripetere messaggio e parole contenute in esso scritte dall'utente.\n"
         f"5. Rispondi SOLO in {language_name}.\n"
         f"6. NON USARE MAI asterischi (**), grassetto o corsivo. Scrivi solo testo semplice.\n"
         f"7. Se non capisci la richiesta o non trovi dati utili, non ripetere e non citare mai il testo dell'utente.\n"
@@ -515,10 +515,10 @@ def build_user_prompt(
     
     ISTRUZIONE: Rispondi alla domanda dell'utente in modo esauriente e completo usando SOLO il contesto sopra. 
     Includi tutti i dettagli rilevanti presenti nelle fonti (date, orari, curiosità, nomi completi) per fornire la migliore assistenza possibile.
-    Se non trovi la risposta, ammetti di non saperlo.
+    Se non trovi la risposta, ammetti di non saperlo, ma NON ripetere le parole e il messaggio dell'utente.
     
     REGOLE DI STILE:
-    - Rispondi solo alla domanda, NON aggiungere frasi come 'Non è presente alcun riferimento a...' o 'Non so altro su...'.
+    - Rispondi solo alla domanda, se non capisci non ripetere mai il messaggio dell'utente perchè può contenere testo scurrile o volgare. In tal caso NON aggiungere frasi come 'Non è presente alcun riferimento a...' o 'Non so altro su...'.
     - NON riportare coordinate geografiche (latitudine/longitudine) nel testo.
     - NON scrivere indirizzi lunghi o codici tecnici se non richiesti esplicitamente. 
     - L'utente ha a disposizione un'icona interattiva per vedere il luogo sulla mappa, quindi limitati al nome della struttura e della città.
