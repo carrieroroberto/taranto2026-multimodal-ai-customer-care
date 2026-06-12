@@ -1283,11 +1283,6 @@
       transform 160ms ease;
   }
 
-  .image-lightbox-close:hover {
-    background: rgba(255, 255, 255, 0.18);
-    transform: translateY(-1px);
-  }
-
   .image-lightbox-close svg {
     width: 1.25rem;
     height: 1.25rem;
@@ -3544,11 +3539,11 @@
   height: 3.15rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--theme-toggle-border);
+  border: 1px solid rgba(224, 242, 254, 0.28);
   border-radius: 999px;
-  background: var(--theme-toggle-bg);
-  color: var(--theme-toggle-text);
-  box-shadow: var(--composer-action-shadow);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.24);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -3568,10 +3563,11 @@
     height: min(94vh, 100%);
     max-height: 94vh;
     gap: 0.54rem;
-    padding: 0.72rem 0.72rem 4.15rem;
+    padding: 0.72rem;
   }
 
   .operator-ticket-modal .operator-detail-header {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
@@ -3580,17 +3576,29 @@
     padding-bottom: 0.52rem;
   }
 
+  .operator-ticket-modal .operator-detail-header > div:first-child {
+    align-self: start;
+  }
+
   .operator-ticket-modal .operator-detail-actions {
     width: auto;
+    flex-direction: row;
+    flex-wrap: nowrap;
     justify-content: flex-end;
-    align-self: start;
-    gap: 0.28rem;
+    align-self: center;
+    gap: 0.3rem;
   }
 
   .operator-ticket-modal .operator-detail-actions button {
+    width: auto;
+    min-width: 3.75rem;
     min-height: 2rem;
-    padding: 0 0.54rem;
-    font-size: 0.72rem;
+    padding: 0 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .operator-ticket-floating-close {
+    display: inline-flex;
   }
 
   .operator-ticket-summary {
@@ -3603,20 +3611,16 @@
   }
 
   .operator-ticket-modal .operator-summary-text {
-    min-height: 4.8rem;
-    max-height: 5.9rem;
-    padding: 0.65rem 0.75rem;
+    min-height: 5.2rem;
+    max-height: 6.3rem;
+    padding: 0.84rem 0.78rem;
   }
 
   .operator-ticket-modal .operator-conversation {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-height: 0;
     margin-right: -0.22rem;
     padding: 0.68rem 0.5rem 0.82rem 0.68rem;
-  }
-
-  .operator-ticket-floating-close {
-    display: inline-flex;
   }
 
   .operator-chat-bubble-media {
@@ -3624,4 +3628,8 @@
     max-width: min(calc(var(--operator-media-width) + 1.15rem), 100%);
     padding: 0.58rem;
   }
+}
+
+.image-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
