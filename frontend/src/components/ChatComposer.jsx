@@ -6,10 +6,12 @@ import { primeTextToSpeech } from "../utils/textToSpeech.js";
 
 export function ChatComposer({
   isSending,
+  isSpeechPlaying = false,
   t,
   onSend,
   onFileSend,
   onStop,
+  onStopSpeech,
   isEscalating,
   onCancelEscalation,
   locale = "it",
@@ -48,6 +50,7 @@ export function ChatComposer({
   const cancelRecordingLabel = t.cancelRecording || stopRecordingLabel;
   const sendAudioLabel = t.sendAudio || t.sendMessage;
   const stopMessageLabel = t.stopMessage || "Stop";
+  const isStopButtonActive = isSending || isSpeechPlaying;
 
   useEffect(() => {
     autosize();
@@ -196,12 +199,20 @@ export function ChatComposer({
 
   function handleSubmit(event) {
     event.preventDefault();
-    stopAudioPlayback();
 
     if (isSending) {
+      stopAudioPlayback();
       onStop?.();
       return;
     }
+
+    if (isSpeechPlaying) {
+      stopAudioPlayback();
+      onStopSpeech?.();
+      return;
+    }
+
+    stopAudioPlayback();
 
     if (isRecording) {
       primeTextToSpeech(locale);
@@ -423,7 +434,7 @@ export function ChatComposer({
           className="message-textarea flex-1 resize-none border-0 bg-transparent px-3 py-3 text-base outline-none focus:ring-0"
           rows="1"
           placeholder={isEscalating ? t.ticketEmailPlaceholder : t.messagePlaceholder}
-          required={!isRecording}
+          required={!isRecording && !isStopButtonActive}
           disabled={isSending || isRecording}
           value={message}
           dir="auto"
@@ -501,13 +512,13 @@ export function ChatComposer({
         <button
           id="sendButton"
           className={`send-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition focus:outline-none focus:ring-4 focus:ring-sky-700/20 ${
-            isSending ? "send-button-stop" : ""
+            isStopButtonActive ? "send-button-stop" : ""
           }`}
           type="submit"
-          aria-label={isSending ? stopMessageLabel : isRecording ? sendAudioLabel : t.sendMessage}
-          disabled={!isSending && !isRecording && !hasText}
+          aria-label={isStopButtonActive ? stopMessageLabel : isRecording ? sendAudioLabel : t.sendMessage}
+          disabled={!isStopButtonActive && !isRecording && !hasText}
         >
-          {isSending ? (
+          {isStopButtonActive ? (
             <svg className="h-[22px] w-[22px]" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="6" width="12" height="12" />
             </svg>

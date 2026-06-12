@@ -25,7 +25,7 @@ import {
   updateMessageFeedback,
 } from "../services/chatApi.js";
 import { getOrCreateSessionId } from "../utils/session.js";
-import { stopAudioPlayback } from "../utils/audioPlayback.js";
+import { STOP_AUDIO_PLAYBACK_EVENT, stopAudioPlayback } from "../utils/audioPlayback.js";
 import { isSupportedSpeechLanguage, speakTextOnce } from "../utils/textToSpeech.js";
 
 const initialMessages = [
@@ -49,6 +49,7 @@ export function ChatPage() {
   const [theme, setTheme] = useState(() => getInitialTheme());
   const [locale, setLocale] = useState(() => getInitialLocale());
   const [composerResetSignal, setComposerResetSignal] = useState(0);
+  const [isSpeechPlaybackActive, setIsSpeechPlaybackActive] = useState(false);
   const sessionIdRef = useRef(getOrCreateSessionId());
   const messageListRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -158,6 +159,18 @@ export function ChatPage() {
     };
   }, []);
 
+  useEffect(() => {
+    function handleAudioPlaybackStop() {
+      setIsSpeechPlaybackActive(false);
+    }
+
+    window.addEventListener(STOP_AUDIO_PLAYBACK_EVENT, handleAudioPlaybackStop);
+
+    return () => {
+      window.removeEventListener(STOP_AUDIO_PLAYBACK_EVENT, handleAudioPlaybackStop);
+    };
+  }, []);
+
   function scrollMessagesToBottom(behavior = "smooth") {
     const messageListElement = messageListRef.current;
     if (!messageListElement) return;
@@ -221,6 +234,12 @@ export function ChatPage() {
       abortControllerRef.current = null;
       setIsSending(false);
       setIsSendingTicket(false);
+      stopAudioPlayback();
+      return;
+    }
+
+    if (isSpeechPlaybackActive) {
+      stopAudioPlayback();
     }
   }
 
@@ -478,7 +497,10 @@ export function ChatPage() {
       }
 
       if (!isImage) {
-        speakTextOnce(answerText, responseLanguage);
+        speakTextOnce(answerText, responseLanguage, {
+          onStart: () => setIsSpeechPlaybackActive(true),
+          onEnd: () => setIsSpeechPlaybackActive(false),
+        });
       }
     } catch (error) {
       if (error.name === "AbortError") {
@@ -573,6 +595,10 @@ export function ChatPage() {
   }
 
   async function handleFeedback(message, satisfied) {
+    if (satisfied === false) {
+      stopAudioPlayback();
+    }
+
     const messageId = message.persistedId || message.id;
     const activeEscalationFlowId = findActiveEscalationFlowId(messages);
     const isActiveEscalationTarget =
@@ -733,11 +759,13 @@ export function ChatPage() {
 
             <ChatComposer
               isSending={isSending || isSendingTicket}
+              isSpeechPlaying={isSpeechPlaybackActive}
               locale={locale}
               t={t}
               onSend={handleSend}
               onFileSend={handleFileSend}
               onStop={handleStop}
+              onStopSpeech={handleStop}
               isEscalating={isEscalating}
               onCancelEscalation={handleCancelEscalation}
               resetDraftSignal={composerResetSignal}

@@ -19,7 +19,7 @@ import {
 } from "../services/operatorApi.js";
 
 const PRIORITY_ORDER = { alta: 0, media: 1, bassa: 2 };
-const OPERATOR_PAGE_TITLE = "TarAI | Dashboard Operatore";
+const OPERATOR_PAGE_TITLE = "T.A.L.O.S. | Taranto 2026 AI Live Operator Support";
 const OPERATOR_POLL_INTERVAL_MS = 5000;
 const THEME_STORAGE_KEY = "tarai-theme";
 const TICKET_VIEW_STORAGE_KEY = "tarai-operator-ticket-view";
@@ -598,8 +598,8 @@ function OperatorTopbar({
       <div className="topbar-inner mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <h1 className="brand-heading truncate">TarAI | Giochi del Mediterraneo</h1>
-            <p className="brand-kicker">Assistente AI multimodale per Taranto 2026</p>
+            <h1 className="brand-heading truncate">T.A.L.O.S | Mediterranean Games</h1>
+            <p className="brand-kicker">Taranto 2026 AI Live Operator Support</p>
           </div>
         </div>
 
@@ -984,7 +984,7 @@ function OperatorConversationMessage({ message }) {
   return (
     <article className={isBot ? "operator-chat-message-block" : "operator-chat-message-block operator-chat-message-block-user"}>
       <time className="operator-chat-timestamp" dateTime={message.created_at || ""}>
-        {isBot ? "TARA" : "Utente"} - {formatDate(message.created_at)}
+        {isBot ? "TALOS" : "Utente"} - {formatDate(message.created_at)}
       </time>
       <div className={isBot ? "operator-chat-turn" : "operator-chat-turn operator-chat-turn-user"}>
         {!isBot ? null : (

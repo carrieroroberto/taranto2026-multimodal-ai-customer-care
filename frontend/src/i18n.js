@@ -12,13 +12,13 @@ export const DEFAULT_LOCALE = "en";
 
 export const translations = {
   it: {
-    appTitle: "TarAI | Giochi del Mediterraneo",
-    appSubtitle: "Assistente AI Multimodale per Taranto 2026",
+    appTitle: "T.A.L.O.S | Giochi del Mediterraneo",
+    appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
-      "TarAI | Assistente AI Multimodale per i Giochi del Mediterraneo 2026 a Taranto",
+      "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
     dateRange: "21 AGO - 3 SET 2026",
     languageLabel: "Lingua",
-    botName: "TARA",
+    botName: "TALOS",
     userLabel: "Utente",
     online: "Online",
     countdownLabel: "Mancano",
@@ -66,13 +66,13 @@ export const translations = {
   },
 
   en: {
-    appTitle: "TarAI | Mediterranean Games",
-    appSubtitle: "Multimodal AI Assistant for Taranto 2026",
+    appTitle: "T.A.L.O.S | Mediterranean Games",
+    appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
-      "TarAI | Multimodal AI Assistant for the Mediterranean Games Taranto 2026",
+      "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
     dateRange: "21 AUG - 3 SEP 2026",
     languageLabel: "Language",
-    botName: "TARA",
+    botName: "TALOS",
     userLabel: "User",
     online: "Online",
     countdownLabel: "Left",
@@ -119,13 +119,13 @@ export const translations = {
   },
 
   es: {
-    appTitle: "TarAI | Juegos Mediterráneos",
-    appSubtitle: "Asistente de IA Multimodal para Taranto 2026",
+    appTitle: "T.A.L.O.S | Juegos Mediterráneos",
+    appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
-      "TarAI | Asistente de IA Multimodal para los Juegos Mediterráneos Taranto 2026",
+      "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
     dateRange: "21 AGO - 3 SEP 2026",
     languageLabel: "Idioma",
-    botName: "TARA",
+    botName: "TALOS",
     userLabel: "Usuario",
     online: "En línea",
     countdownLabel: "Faltan",
@@ -173,13 +173,13 @@ export const translations = {
   },
 
   fr: {
-    appTitle: "TarAI | Jeux Méditerranéens",
-    appSubtitle: "Assistant IA Multimodal pour Taranto 2026",
+    appTitle: "T.A.L.O.S | Jeux Méditerranéens",
+    appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
-      "TarAI | Assistant IA Multimodal pour les Jeux Méditerranéens Taranto 2026",
+      "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
     dateRange: "21 AOÛT - 3 SEPT. 2026",
     languageLabel: "Langue",
-    botName: "TARA",
+    botName: "TALOS",
     userLabel: "Utilisateur",
     online: "En ligne",
     countdownLabel: "Restant",
@@ -227,13 +227,13 @@ export const translations = {
   },
 
   ar: {
-    appTitle: "TarAI | ألعاب المتوسط",
-    appSubtitle: "مساعد ذكاء اصطناعي متعدد الوسائط لتارانتو 2026",
+    appTitle: "T.A.L.O.S | ألعاب المتوسط",
+    appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
-      "TarAI | مساعد ذكاء اصطناعي متعدد الوسائط لألعاب البحر الأبيض المتوسط 2026 في تارانتو",
+      "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
     dateRange: "21 أغسطس - 3 سبتمبر 2026",
     languageLabel: "اللغة",
-    botName: "TARA",
+    botName: "TALOS",
     userLabel: "المستخدم",
     online: "متصل",
     countdownLabel: "الوقت المتبقي",

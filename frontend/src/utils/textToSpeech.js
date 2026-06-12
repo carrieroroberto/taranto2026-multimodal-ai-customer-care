@@ -40,14 +40,33 @@ export function primeTextToSpeech(language) {
   }
 }
 
-export function speakTextOnce(text, language) {
+export function speakTextOnce(text, language, options = {}) {
   const speechText = normalizeSpeechText(text);
   const speech = getSpeechSynthesis();
   if (!speechText || !speech || typeof SpeechSynthesisUtterance === "undefined") {
+    options.onEnd?.();
     return;
   }
 
   const speechLanguage = getSpeechLanguage(language);
+  let didStart = false;
+  let didFinish = false;
+
+  const notifyStart = () => {
+    if (didStart) {
+      return;
+    }
+    didStart = true;
+    options.onStart?.();
+  };
+
+  const notifyEnd = () => {
+    if (didFinish) {
+      return;
+    }
+    didFinish = true;
+    options.onEnd?.();
+  };
 
   function speakNow() {
     const utterance = new SpeechSynthesisUtterance(speechText);
@@ -68,12 +87,20 @@ export function speakTextOnce(text, language) {
       }
     };
 
-    utterance.onend = clearResumeTimer;
-    utterance.onerror = clearResumeTimer;
+    utterance.onstart = notifyStart;
+    utterance.onend = () => {
+      clearResumeTimer();
+      notifyEnd();
+    };
+    utterance.onerror = () => {
+      clearResumeTimer();
+      notifyEnd();
+    };
 
     speech.cancel();
     speech.speak(utterance);
     speech.resume?.();
+    notifyStart();
 
     resumeTimer = window.setInterval(() => {
       speech.resume?.();
