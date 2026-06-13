@@ -1,6 +1,8 @@
-# TarAI - Assistente AI Multimodale per i Giochi del Mediterraneo Taranto 2026
+# T.A.L.O.S. | Taranto 2026 Live Operator Support
 
-TarAI è un assistente customer-care multimodale per i Giochi del Mediterraneo di Taranto 2026. Il progetto combina una UI React installabile come PWA, un backend FastAPI e una pipeline RAG basata su ChromaDB, embedding semantici e LLM locale tramite Ollama.
+## ChatBot AI Multimodale di Customer-Care per i Giochi del Mediterraneo
+
+T.A.L.O.S. è un assistente customer-care multimodale per i Giochi del Mediterraneo di Taranto 2026. Il progetto combina una UI React installabile come PWA, un backend FastAPI e una pipeline RAG basata su ChromaDB, embedding semantici e LLM locale tramite Ollama.
 
 L'obiettivo è fornire risposte utili, brevi e fondate sulla knowledge base del progetto, evitando di inventare date, prezzi, sedi, risultati live o informazioni non presenti nei dati recuperati.
 
@@ -14,6 +16,8 @@ Il progetto è una web app full-stack containerizzata con Docker Compose.
 - Postgres per conversazioni, messaggi, ticket e KPI.
 - Ollama come servizio LLM locale.
 - Groq API supportata per usare LLM e multimodale senza GPU locale.
+- Dashboard operatore protetta da login su `/operator`, con lista ticket, dettaglio conversazione, traduzione, bozza email e chiusura ticket.
+- Runner benchmark KPI in `eval/` per esportare metriche tecniche, informative e operative in `results.csv`.
 - Modello LLM configurato di default: `qwen3:8b`.
 - Modello embedding configurato di default: `BAAI/bge-m3`.
 - Tunnel HTTPS temporaneo con Cloudflare per test da iPhone, PWA e microfono.
@@ -39,6 +43,9 @@ Il progetto è una web app full-stack containerizzata con Docker Compose.
 - Fonti mostrate come favicon cliccabili dopo le risposte del bot, quando disponibili.
 - Domande suggerite tradotte in base alla lingua della UI.
 - Countdown nell'header.
+- Feedback utente sui messaggi bot e apertura ticket verso operatore umano.
+- Dashboard operatore con filtri, ordinamento, polling automatico nuovi ticket e modal dettaglio.
+- Export benchmark KPI in `eval/outputs/results.csv` tramite un singolo CSV strutturato.
 
 ## Architettura
 
@@ -82,12 +89,20 @@ Servizi Docker principali:
 ├── backend/
 │   ├── app/
 │   │   ├── api/              # Route FastAPI
-│   │   ├── repositories/     # Accesso a ChromaDB
+│   │   ├── repositories/     # Postgres e ChromaDB
 │   │   ├── schemas/          # Schemi request/response
-│   │   ├── services/         # RAG, LLM, OCR, ASR, visione
+│   │   ├── services/         # RAG, LLM, OCR, ASR, visione, ticket
 │   │   ├── config.py
 │   │   └── main.py
+│   ├── data/
+│   │   └── kb.jsonl          # Knowledge base indicizzata
+│   ├── db/
+│   │   └── init.sql          # Schema iniziale Postgres
+│   ├── requirements.txt
 │   └── Dockerfile
+├── eval/
+│   ├── run_kpi_eval.py      # Runner benchmark KPI
+│   └── test_cases.jsonl     # Dataset ground truth per valutazione
 ├── frontend/
 │   ├── public/
 │   │   ├── icons/            # Icone PWA e fallback favicon fonti
@@ -95,15 +110,15 @@ Servizi Docker principali:
 │   ├── src/
 │   │   ├── assets/           # Asset importati da React
 │   │   ├── components/       # Componenti UI
-│   │   ├── pages/            # Pagine React
+│   │   ├── pages/            # Chat e dashboard operatore
 │   │   ├── services/         # Client API frontend
 │   │   ├── utils/            # Utility frontend
 │   │   ├── i18n.js
 │   │   ├── main.jsx
 │   │   └── styles.css
+│   ├── package.json
 │   └── Dockerfile
 ├── docker-compose.yml
-├── requirements.txt
 ├── .env.example
 └── README.md
 ```
@@ -206,6 +221,7 @@ docker compose up --build
 Aprire da PC:
 
 - Frontend: <http://localhost:5173>
+- Dashboard operatore: <http://localhost:5173/operator>
 - Backend API docs: <http://localhost:8000/docs>
 - ChromaDB: <http://localhost:8001>
 - Postgres: `localhost:5433`
@@ -269,7 +285,7 @@ Da iPhone:
 1. Aprire quell'URL in Safari.
 2. Verificare chat e microfono.
 3. Per installare la PWA: Condividi -> Aggiungi alla schermata Home.
-4. Aprire TarAI dall'icona installata.
+4. Aprire T.A.L.O.S. dall'icona installata.
 
 Il tunnel gratuito è temporaneo: a ogni riavvio puo' cambiare URL.
 
@@ -342,8 +358,7 @@ Content-Type: multipart/form-data
 Campi principali:
 
 - `message`: testo dell'utente.
-- `image`: immagine opzionale.
-- `audio`: audio opzionale.
+- `file`: file immagine o audio.
 - `session_id`: opzionale.
 - `language`: opzionale.
 
@@ -369,13 +384,44 @@ Operatore demo creato automaticamente:
 
 La password viene salvata nella tabella `operators` come hash generato da `pgcrypto`; non viene salvata in chiaro. Non e' prevista registrazione pubblica di nuovi operatori.
 
+### Dashboard Operatore
+
+La dashboard e' disponibile nel frontend al path:
+
+```text
+/operator
+```
+
+Funzioni principali:
+
+- login/logout operatore con JWT;
+- lista ticket con filtri per stato, ordinamento e modalita' card/lista;
+- polling automatico dei nuovi ticket;
+- dettaglio ticket con conversazione associata e media allegati;
+- traduzione della conversazione;
+- generazione bozza email di risposta;
+- chiusura ticket da modal dettaglio.
+
+Route principali usate dalla dashboard:
+
+```http
+POST /api/operator/login
+POST /api/operator/logout
+GET /api/operator/me
+GET /api/operator/tickets
+GET /api/operator/tickets/{ticket_id}
+POST /api/operator/tickets/{ticket_id}/translate
+POST /api/operator/tickets/{ticket_id}/email-draft
+PATCH /api/operator/tickets/{ticket_id}/status
+```
+
 ### KPI
 
 ```http
 GET /api/kpis
 ```
 
-Restituisce conteggi aggregati da `conversations`, `messages` e `tickets`, inclusi ticket per stato e feedback positivo/negativo.
+Restituisce conteggi aggregati da `conversations`, `messages` e `tickets`, inclusi ticket per stato e feedback positivo/negativo. La route espone metriche operative cumulative del database; per benchmark riproducibili usare anche il runner `eval/run_kpi_eval.py`.
 
 ### Feedback
 
@@ -385,6 +431,119 @@ POST /api/feedback
 
 Il feedback aggiorna `messages.satisfaction` sul messaggio bot selezionato: `true` per pollice su, `false` per pollice giu'. Il valore iniziale nel database resta `NULL`.
 Per vincolo DB, `satisfaction` puo' essere valorizzato solo su righe `role = 'bot'`; sui messaggi utente resta sempre `NULL`.
+
+## Benchmark KPI E Export CSV
+
+La cartella `eval/` contiene una soluzione esterna per misurare KPI tecnici,
+informativi e operativi senza modificare il funzionamento del chatbot o della
+dashboard operatore.
+
+Il runner usa due fonti:
+
+- API HTTP esistenti: `/api/chat`, `/api/messages/{message_id}/feedback`,
+  `/api/tickets`, `/api/kpis`;
+- import read-only dei servizi backend per le metriche retrieval top-5:
+  `build_query_plan()` e `retrieve_context()`.
+
+Output predefinito:
+
+```text
+eval/outputs/results.csv
+```
+
+`results.csv` viene sovrascritto a ogni run e contiene solo le colonne
+`kpi`, `description`, `value` e `unit`.
+`eval/outputs/` e' ignorata da Git per non versionare risultati di benchmark locali.
+
+Uso rapido, con backend, database e ChromaDB gia' avviati:
+
+```bash
+python eval/run_kpi_eval.py --base-url http://127.0.0.1:8000/api
+```
+
+Se si esegue da host e mancano dipendenze Python del backend, usare il container:
+
+```bash
+docker exec tarai-backend sh -lc "rm -rf /app/eval && mkdir -p /app/eval"
+docker cp eval/run_kpi_eval.py tarai-backend:/app/eval/run_kpi_eval.py
+docker cp eval/test_cases.jsonl tarai-backend:/app/eval/test_cases.jsonl
+docker exec tarai-backend python /app/eval/run_kpi_eval.py --base-url http://127.0.0.1:8000/api
+docker cp tarai-backend:/app/eval/outputs/results.csv eval/outputs/results.csv
+```
+
+Comandi utili:
+
+```bash
+# valida solo il dataset
+python eval/run_kpi_eval.py --validate-only
+
+# solo metriche HTTP e KPI database
+python eval/run_kpi_eval.py --skip-retrieval
+
+# solo metriche retrieval, senza chiamare il chatbot
+python eval/run_kpi_eval.py --skip-chat --skip-kpi-snapshot
+
+# ripete ogni domanda 3 volte per stabilizzare la latenza
+python eval/run_kpi_eval.py --repeat 3
+
+# scrive feedback di test sui messaggi bot generati
+python eval/run_kpi_eval.py --post-feedback
+
+# scrive feedback negativi e apre ticket sui casi marcati open_ticket=true
+python eval/run_kpi_eval.py --post-feedback --post-tickets
+```
+
+Per una relazione finale riproducibile, usare un database pulito o un database
+dedicato alla run di benchmark.
+
+Il dataset `eval/test_cases.jsonl` contiene una domanda per riga:
+
+```json
+{
+  "id": "venue_canoe_001",
+  "message": "Dove si svolge la canoa kayak a Taranto 2026?",
+  "language": "it",
+  "expected_domain": "venue",
+  "relevant_doc_ids": ["sport_canoa_kayak"],
+  "expected_escalation": false,
+  "feedback": true
+}
+```
+
+Il dataset attuale e' testuale. Per simulare escalation operative senza
+alterare chatbot o dashboard, alcuni casi usano feedback negativo e
+`open_ticket: true`; con `--post-tickets` il runner apre un ticket tramite la
+route pubblica `/api/tickets`.
+
+```json
+{
+  "id": "edge_payment_problem_129",
+  "modality": "text",
+  "message": "Il pagamento online del biglietto non funziona...",
+  "language": "it",
+  "expected_domain": "ticketing",
+  "relevant_doc_ids": ["ticketing_general_taranto_2026"],
+  "feedback": false,
+  "open_ticket": true,
+  "user_email": "kpi.eval+payment@example.com"
+}
+```
+
+KPI calcolati:
+
+| Macroarea | KPI | Fonte |
+| --- | --- | --- |
+| Qualita informativa | Domain Accuracy | Retrieval |
+| Qualita informativa | Recall@5 | Retrieval |
+| Qualita informativa | Precision@5 | Retrieval |
+| Qualita informativa | MRR | Retrieval |
+| Qualita informativa | Source Coverage Rate | API/Retrieval |
+| Performance tecnica | Average Latency | Backend/API |
+| Performance tecnica | p95 Latency | Backend/API |
+| Performance tecnica | Error Rate | Backend/API |
+| Impatto operativo | Containment Rate | API/Database |
+| Impatto operativo | Escalation Rate | API/Database |
+| Impatto operativo | Feedback Score | Database |
 
 ## Sviluppo Frontend
 
@@ -417,7 +576,10 @@ Responsabilità principali:
 - analisi immagine/OCR quando disponibile;
 - query planning LLM;
 - retrieval e reranking;
-- generazione della risposta finale.
+- generazione della risposta finale;
+- ticketing e feedback utente;
+- autenticazione operatore e API dashboard;
+- aggregazione KPI e metriche operative.
 
 In Docker il backend comunica con:
 
