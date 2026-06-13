@@ -2925,6 +2925,15 @@
   filter: brightness(0.97);
 }
 
+.operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button-disabled,
+.operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button-disabled:hover {
+  border-color: var(--operator-status-closed-border);
+  background: var(--operator-status-closed-bg);
+  color: var(--operator-status-closed-text);
+  filter: none;
+  opacity: 0.78;
+}
+
 .app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-close-ticket-button {
   border-color: rgba(248, 113, 113, 0.42);
   background: rgba(127, 29, 29, 0.34);
@@ -2957,6 +2966,14 @@
 .app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button:hover {
   background: var(--operator-status-open-bg);
   filter: brightness(1.08);
+}
+
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button-disabled,
+.app-surface[data-theme="dark"] .operator-ticket-modal .operator-detail-actions .operator-reply-ticket-button-disabled:hover {
+  border-color: var(--operator-status-closed-border);
+  background: var(--operator-status-closed-bg);
+  color: var(--operator-status-closed-text);
+  filter: none;
 }
 
 .operator-logout-button {

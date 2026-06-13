@@ -419,6 +419,7 @@ export function OperatorDashboardPage() {
           ticket.id === selectedTicket.id ? { ...ticket, status: nextStatus } : ticket,
         ),
       );
+      closeTicketModal();
     } catch (_error) {
       setError("Impossibile aggiornare lo stato del ticket.");
     }
@@ -1004,6 +1005,9 @@ function TicketDetail({
   const priorityLabel = formatUpperLabel(ticket.priority || "media");
   const statusLabel = formatUpperLabel(ticket.status || "aperto");
   const isClosed = ticket.status === "chiuso";
+  const replyButtonClassName = isClosed
+    ? "operator-primary-button operator-reply-ticket-button operator-reply-ticket-button-disabled"
+    : "operator-primary-button operator-reply-ticket-button";
 
   return (
     <>
@@ -1025,7 +1029,7 @@ function TicketDetail({
           <button className="operator-translate-ticket-button" type="button" disabled={isTranslating} onClick={onTranslate}>
             {isConversationTranslated ? "Originale" : "Traduci"}
           </button>
-          <button className="operator-primary-button operator-reply-ticket-button" type="button" disabled={isDraftingEmail} onClick={onMailTo}>
+          <button className={replyButtonClassName} type="button" disabled={isDraftingEmail || isClosed} onClick={onMailTo}>
             {"Rispondi"}
           </button>
         </div>
