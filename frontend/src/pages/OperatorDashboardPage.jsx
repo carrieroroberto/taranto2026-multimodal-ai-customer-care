@@ -626,7 +626,10 @@ function OperatorTopbar({
       <div className="topbar-inner mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <h1 className="brand-heading truncate">T.A.L.O.S | Giochi del Mediterraneo</h1>
+            <h1 className="brand-heading truncate">
+              <span className="app-title-desktop">T.A.L.O.S | Giochi del Mediterraneo</span>
+              <span className="app-title-mobile">T.A.L.O.S. | Taranto 2026</span>
+            </h1>
             <p className="brand-kicker">Taranto 2026 AI Live Operator Support</p>
           </div>
         </div>

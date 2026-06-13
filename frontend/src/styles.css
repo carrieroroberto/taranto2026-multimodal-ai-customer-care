@@ -322,6 +322,12 @@
     color: var(--brand-blue);
   }
 
+  .app-title-mobile {
+    display: none;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
   .date-chip,
   .tag-chip {
     @apply rounded-full border px-3.5 py-2 text-sm font-extrabold uppercase;
@@ -408,6 +414,14 @@
   }
 
   @media (max-width: 767px) {
+    .app-title-desktop {
+      display: none;
+    }
+
+    .app-title-mobile {
+      display: inline;
+    }
+
     .language-select-desktop,
     .theme-toggle-desktop {
       display: none;
@@ -488,7 +502,7 @@
   }
 
   .chat-header {
-    @apply flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 sm:px-8;
+    @apply flex shrink-0 items-center justify-between gap-4 border-b px-4 py-4 sm:px-8;
     background: var(--chat-header-bg);
     border-color: var(--chat-header-border);
     backdrop-filter: blur(18px) saturate(1.45);

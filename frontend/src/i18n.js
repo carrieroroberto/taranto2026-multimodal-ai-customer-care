@@ -13,6 +13,7 @@ export const DEFAULT_LOCALE = "en";
 export const translations = {
   it: {
     appTitle: "T.A.L.O.S | Giochi del Mediterraneo",
+    mobileAppTitle: "T.A.L.O.S. | Taranto 2026",
     appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
       "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
@@ -22,7 +23,7 @@ export const translations = {
     userLabel: "Utente",
     online: "Online",
     countdownLabel: "Mancano",
-    countdownUnits: { days: "gg", hours: "h", minutes: "m", seconds: "s" },
+    countdownUnits: { days: "g", hours: "h", minutes: "m", seconds: "s" },
     gamesStarted: "Giochi in corso",
     officialSiteAria: "Apri il sito ufficiale Taranto 2026",
     messageLabel: "Messaggio",
@@ -67,6 +68,7 @@ export const translations = {
 
   en: {
     appTitle: "T.A.L.O.S | Mediterranean Games",
+    mobileAppTitle: "T.A.L.O.S. | Taranto 2026",
     appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
       "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
@@ -120,6 +122,7 @@ export const translations = {
 
   es: {
     appTitle: "T.A.L.O.S | Juegos Mediterráneos",
+    mobileAppTitle: "T.A.L.O.S. | Taranto 2026",
     appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
       "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
@@ -174,6 +177,7 @@ export const translations = {
 
   fr: {
     appTitle: "T.A.L.O.S | Jeux Méditerranéens",
+    mobileAppTitle: "T.A.L.O.S. | Tarente 2026",
     appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
       "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",
@@ -183,7 +187,7 @@ export const translations = {
     userLabel: "Utilisateur",
     online: "En ligne",
     countdownLabel: "Restant",
-    countdownUnits: { days: "j", hours: "h", minutes: "min", seconds: "s" },
+    countdownUnits: { days: "j", hours: "h", minutes: "m", seconds: "s" },
     gamesStarted: "Jeux en cours",
     officialSiteAria: "Ouvrir le site officiel Taranto 2026",
     messageLabel: "Message",
@@ -198,7 +202,7 @@ export const translations = {
     cancelRecording: "Annuler l'enregistrement",
     sendAudio: "Envoyer l'audio",
     audioMessage: "Message audio",
-    typing: "Préparation de la risposta",
+    typing: "Préparation de la réponse",
     unavailableAnswer: "Réponse non disponible.",
     stoppedResponse: "Réponse interrompue.",
     errorPrefix: "Une erreur s’est produite :",
@@ -228,6 +232,7 @@ export const translations = {
 
   ar: {
     appTitle: "T.A.L.O.S | ألعاب المتوسط",
+    mobileAppTitle: "T.A.L.O.S. | \u062A\u0627\u0631\u0627\u0646\u062A\u0648 2026",
     appSubtitle: "Taranto 2026 AI Live Operator Support",
     pageTitle:
       "T.A.L.O.S. | Taranto 2026 AI Live Operator Support",

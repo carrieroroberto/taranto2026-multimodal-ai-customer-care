@@ -15,7 +15,10 @@ export function AppHeader({
       <div className="topbar-inner mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <h1 className="brand-heading truncate">{t.appTitle}</h1>
+            <h1 className="brand-heading truncate">
+              <span className="app-title-desktop">{t.appTitle}</span>
+              <span className="app-title-mobile">{t.mobileAppTitle || t.appTitle}</span>
+            </h1>
             <p className="brand-kicker">{t.appSubtitle}</p>
           </div>
         </div>
