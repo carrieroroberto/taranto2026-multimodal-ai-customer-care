@@ -22,6 +22,7 @@ L'obiettivo del progetto è fornire risposte automatiche esaustive, basate sulle
 - Feedback utente sui messaggi del bot.
 - Apertura ticket verso operatore umano su feedback negativo.
 - Dashboard operatore con login, lista ticket, filtri, dettaglio conversazione, traduzione, suggerimento email di risposta multilingua e chiusura ticket.
+- Gestione protetta della knowledge base da `/knowledge`, con inserimento record e ingest incrementale immediato.
 - Tema chiaro/scuro e preferenze salvate in `localStorage`.
 - PWA installabile e testabile anche da mobile tramite tunnel HTTPS Cloudflare.
 
@@ -69,7 +70,7 @@ Servizi Docker:
 │   │   ├── api/              # Route FastAPI
 │   │   ├── repositories/     # Postgres e ChromaDB
 │   │   ├── schemas/          # DTO request/response
-│   │   ├── services/         # RAG, LLM, multimodale, ticket
+│   │   ├── services/         # RAG, LLM, multimodale, ticket, ingest KB
 │   │   ├── config.py
 │   │   └── main.py
 │   ├── data/
@@ -87,7 +88,7 @@ Servizi Docker:
 │   ├── public/               # Manifest PWA, icone, asset pubblici
 │   ├── src/
 │   │   ├── components/
-│   │   ├── pages/            # ChatPage e OperatorDashboardPage
+│   │   ├── pages/            # ChatPage, OperatorDashboardPage e KnowledgeBaseAdminPage
 │   │   ├── services/         # Client API frontend
 │   │   ├── utils/
 │   │   ├── i18n.js
@@ -178,6 +179,7 @@ Link locali:
 
 - ChatBot: <http://localhost:5173>
 - Dashboard operatore: <http://localhost:5173/operator>
+- Gestione knowledge base: <http://localhost:5173/knowledge>
 - API docs: <http://localhost:8000/docs>
 - Health backend: <http://localhost:8000/health>
 - ChromaDB: <http://localhost:8001>
@@ -381,6 +383,50 @@ POST /api/operator/tickets/{ticket_id}/email-draft
 PATCH /api/operator/tickets/{ticket_id}/status
 ```
 
+## Gestione Knowledge Base
+
+Path frontend:
+
+```text
+/knowledge
+```
+
+La pagina usa lo stesso login operatore della dashboard e permette di aggiungere nuove informazioni alla knowledge base tramite form strutturato, senza riavviare backend o chatbot.
+
+Flusso operativo:
+
+1. l'operatore accede con le credenziali della dashboard;
+2. compila titolo, fonte, tipo, dominio e documento;
+3. se il tipo o il dominio descrivono un luogo, il form abilita anche indirizzo, latitudine e longitudine;
+4. al click su `Aggiungi`, il backend crea il record JSONL e lo indicizza in ChromaDB;
+5. la richiesta termina solo quando il nuovo contenuto e' disponibile per il retrieval del chatbot.
+
+Campi del form:
+
+| Campo | Obbligatorio | Note |
+| --- | --- | --- |
+| `title` | Si | Titolo del contenuto informativo |
+| `source_url` | Si | URL della fonte informativa |
+| `item_type` | Si | Tipo del record, scelto dalle opzioni backend |
+| `domain` | Si | Dominio informativo, scelto dalle opzioni backend |
+| `document` | Si | Testo indicizzabile nella knowledge base |
+| `address` | Solo se attivo | Abilitato per record coerenti con informazioni geografiche |
+| `latitude` | Solo se attivo | Valore numerico tra -90 e 90 |
+| `longitude` | Solo se attivo | Valore numerico tra -180 e 180 |
+
+L'ID record non viene richiesto all'operatore: viene generato automaticamente dal backend a partire dal titolo e da un suffisso univoco.
+
+I campi geografici sono abilitati quando `item_type` e' uno tra `venue`, `event_schedule`, `transport`, `accessibility`, oppure quando `domain` e' `venue` o `accessibility`. Se la combinazione selezionata non e' geografica, i campi restano disabilitati e non vengono inviati.
+
+Il backend valida il payload, aggiunge un record JSONL a `backend/data/kb.jsonl` e indicizza subito il nuovo documento in ChromaDB. Non viene creata una tabella Postgres dedicata per questa funzione: Postgres resta usato per operatori, conversazioni, feedback e ticket.
+
+Route protette:
+
+```http
+GET /api/knowledge/options
+POST /api/knowledge/records
+```
+
 ## Benchmark KPI e CSV
 
 La cartella `eval/` contiene un runner esterno che misura KPI informativi, tecnici e operativi.
@@ -522,6 +568,12 @@ Login operatore da UI:
 
 ```text
 http://localhost:5173/operator
+```
+
+Gestione knowledge base da UI:
+
+```text
+http://localhost:5173/knowledge
 ```
 
 ## Troubleshooting
