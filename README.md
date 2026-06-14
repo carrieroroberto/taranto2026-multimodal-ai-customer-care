@@ -22,7 +22,7 @@ L'obiettivo del progetto è fornire risposte automatiche esaustive, basate sulle
 - Feedback utente sui messaggi del bot.
 - Apertura ticket verso operatore umano su feedback negativo.
 - Dashboard operatore con login, lista ticket, filtri, dettaglio conversazione, traduzione, suggerimento email di risposta multilingua e chiusura ticket.
-- Gestione protetta della knowledge base da `/knowledge`, con inserimento record e ingest incrementale immediato.
+- Gestione della knowledge base tramite GUI con inserimento record e ingest immediato.
 - Tema chiaro/scuro e preferenze salvate in `localStorage`.
 - PWA installabile e testabile anche da mobile tramite tunnel HTTPS Cloudflare.
 
@@ -391,7 +391,7 @@ Path frontend:
 /knowledge
 ```
 
-La pagina usa lo stesso login operatore della dashboard e permette di aggiungere nuove informazioni alla knowledge base tramite form strutturato, senza riavviare backend o chatbot.
+La pagina usa login operatore e permette di aggiungere nuove informazioni alla knowledge base tramite form.
 
 Flusso operativo:
 
@@ -399,7 +399,7 @@ Flusso operativo:
 2. compila titolo, fonte, tipo, dominio e documento;
 3. se il tipo o il dominio descrivono un luogo, il form abilita anche indirizzo, latitudine e longitudine;
 4. al click su `Aggiungi`, il backend crea il record JSONL e lo indicizza in ChromaDB;
-5. la richiesta termina solo quando il nuovo contenuto e' disponibile per il retrieval del chatbot.
+5. la richiesta termina solo quando il nuovo contenuto è disponibile per il retrieval del ChatBot.
 
 Campi del form:
 
@@ -414,11 +414,11 @@ Campi del form:
 | `latitude` | Solo se attivo | Valore numerico tra -90 e 90 |
 | `longitude` | Solo se attivo | Valore numerico tra -180 e 180 |
 
-L'ID record non viene richiesto all'operatore: viene generato automaticamente dal backend a partire dal titolo e da un suffisso univoco.
+L'ID record non viene richiesto all'operatore, ma viene generato automaticamente dal backend a partire dal titolo e da un suffisso univoco.
 
-I campi geografici sono abilitati quando `item_type` e' uno tra `venue`, `event_schedule`, `transport`, `accessibility`, oppure quando `domain` e' `venue` o `accessibility`. Se la combinazione selezionata non e' geografica, i campi restano disabilitati e non vengono inviati.
+I campi geografici sono abilitati quando `item_type` è uno tra `venue`, `event_schedule`, `transport`, `accessibility`, oppure quando `domain` è `venue` o `accessibility`. Se la combinazione selezionata non è geografica, i campi restano disabilitati e non vengono inviati.
 
-Il backend valida il payload, aggiunge un record JSONL a `backend/data/kb.jsonl` e indicizza subito il nuovo documento in ChromaDB. Non viene creata una tabella Postgres dedicata per questa funzione: Postgres resta usato per operatori, conversazioni, feedback e ticket.
+Il backend valida il payload, aggiunge un record JSONL a `backend/data/kb.jsonl` e indicizza subito il nuovo documento in ChromaDB.
 
 Route protette:
 
