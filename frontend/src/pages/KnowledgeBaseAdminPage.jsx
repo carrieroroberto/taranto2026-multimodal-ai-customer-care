@@ -148,7 +148,7 @@ export function KnowledgeBaseAdminPage() {
       const payload = normalizeFormPayload(form, isLocationFieldsEnabled);
       const result = await createKnowledgeRecord(token, payload);
       setSuccess(`Record ${result.record.id} aggiunto, indicizzato e disponibile per il ChatBot.`);
-      setForm({ ...DEFAULT_FORM, item_type: payload.item_type, domain: payload.domain });
+      setForm({ ...DEFAULT_FORM });
     } catch (submitError) {
       if (isUnauthorized(submitError)) {
         handleSessionExpired();
