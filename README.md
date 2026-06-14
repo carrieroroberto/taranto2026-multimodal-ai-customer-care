@@ -411,7 +411,7 @@ docker exec talos-backend python /app/eval/run_kpi_eval.py --base-url http://127
 docker cp talos-backend:/app/eval/outputs/results.csv eval/outputs/results.csv
 ```
 
-## KPI calcolati
+## KPI Calcolati
 
 | Macroarea | KPI | Formula |
 | --- | --- | --- |
