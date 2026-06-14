@@ -1,0 +1,15 @@
+kpi;description;value;unit
+Domain Accuracy;Capacita di classificare correttamente il dominio della domanda;0.9262;percent
+Recall@5;Almeno un documento corretto tra i primi 5 risultati;0.7951;ratio
+Precision@5;Quota di documenti pertinenti tra i primi 5 risultati;0.2525;ratio
+MRR;Reciprocal rank medio del primo documento corretto;0.7204;ratio
+Source Coverage Rate;Percentuale di risposte supportate da almeno una fonte della KB;0.7907;percent
+Average Latency;Tempo medio di risposta end-to-end del sistema;56.550.282;ms
+p95 Latency;Tempo entro cui rientra il 95 percento delle richieste;109.173.355;ms
+Error Rate;Percentuale di richieste fallite rispetto al totale;0.0077;percent
+Escalation Rate;Percentuale di conversazioni test trasferite o trasformate in ticket operatore;0.062;percent
+Containment Rate;Percentuale di conversazioni risolte senza operatore;0.938;percent
+Escalation Rate DB Snapshot;Ticket totali diviso conversazioni totali nel database;0.0566;percent
+Containment Rate DB Snapshot;Conversazioni senza ticket operatore nel database;0.9434;percent
+Feedback Score;Soddisfazione utente sui messaggi valutati;0.9273;percent
+Escalation Rate DB Delta;Nuovi ticket diviso nuove conversazioni durante la run;0.0615;percent
