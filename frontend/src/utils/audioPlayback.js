@@ -1,4 +1,4 @@
-export const STOP_AUDIO_PLAYBACK_EVENT = "tarai:stop-audio-playback";
+export const STOP_AUDIO_PLAYBACK_EVENT = "talos:stop-audio-playback";
 
 export function stopAudioPlayback() {
   if (typeof window === "undefined") {

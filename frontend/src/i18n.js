@@ -1,4 +1,4 @@
-export const LOCALE_STORAGE_KEY = "tarai-locale";
+export const LOCALE_STORAGE_KEY = "talos-locale";
 
 export const SUPPORTED_LOCALES = [
   { code: "it", flag: "🇮🇹", name: "Italiano", htmlLang: "it", dir: "ltr" },

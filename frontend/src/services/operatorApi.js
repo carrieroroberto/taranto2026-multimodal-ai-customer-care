@@ -1,6 +1,6 @@
 const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL || "/api";
-const OPERATOR_TOKEN_KEY = "tarai-operator-token";
-const OPERATOR_KEY = "tarai-operator";
+const OPERATOR_TOKEN_KEY = "talos-operator-token";
+const OPERATOR_KEY = "talos-operator";
 
 export function getStoredOperatorSession() {
   const token = window.localStorage.getItem(OPERATOR_TOKEN_KEY);

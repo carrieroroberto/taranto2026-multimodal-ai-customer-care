@@ -23,8 +23,8 @@ import {
 const PRIORITY_ORDER = { alta: 0, media: 1, bassa: 2 };
 const OPERATOR_PAGE_TITLE = "T.A.L.O.S. | Taranto 2026 AI Live Operator Support";
 const OPERATOR_POLL_INTERVAL_MS = 5000;
-const THEME_STORAGE_KEY = "tarai-theme";
-const TICKET_VIEW_STORAGE_KEY = "tarai-operator-ticket-view";
+const THEME_STORAGE_KEY = "talos-theme";
+const TICKET_VIEW_STORAGE_KEY = "talos-operator-ticket-view";
 const themeLabels = {
   themeToLight: "Passa alla modalita chiara",
   themeToDark: "Passa alla modalita scura",
@@ -721,7 +721,7 @@ function OperatorLoginCard({ error, onLogin }) {
         <p className="brand-kicker">AREA RISERVATA</p>
       </div>
       <p className="operator-login-copy">
-        Dashboard per la Gestione dei Ticket di TarAI.
+        Dashboard per la Gestione dei Ticket di T.A.L.O.S.
       </p>
       <form className="operator-login-form" onSubmit={handleSubmit}>
         <label>

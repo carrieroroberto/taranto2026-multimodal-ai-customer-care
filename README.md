@@ -180,7 +180,7 @@ Non inserire IP locali hardcoded nel frontend. Le chiamate devono passare da pat
 
 ## Avvio Con Docker
 
-Il progetto Docker Compose usa il nome progetto `tarai`, quindi rete e risorse Compose vengono isolate sotto quel nome.
+Il progetto Docker Compose usa il nome progetto `talos`, quindi rete e risorse Compose vengono isolate sotto quel nome.
 
 Su Windows si puo' usare lo script rapido:
 
@@ -229,15 +229,15 @@ Aprire da PC:
 
 Accesso pgAdmin di sviluppo:
 
-- Email: `admin@tarai.com`
+- Email: `admin@talos.com`
 - Password: `ChatbotTaranto2026!`
 
 Per collegare il database in pgAdmin:
 
 - Host name/address: `database`
 - Port: `5432`
-- Maintenance database: `tarai`
-- Username: `tarai`
+- Maintenance database: `talos`
+- Username: `talos`
 - Password: `ChatbotTaranto2026!`
 
 Se si accede a Postgres da strumenti installati sul PC, usare invece host `localhost` e porta `5433`.
@@ -379,7 +379,7 @@ Il ticket viene salvato in Postgres nella tabella `tickets` e collegato alla con
 
 Operatore demo creato automaticamente:
 
-- Email: `operatore@tarai.it`
+- Email: `operatore@talos.it`
 - Password: `OperatoreTaranto2026!`
 
 La password viene salvata nella tabella `operators` come hash generato da `pgcrypto`; non viene salvata in chiaro. Non e' prevista registrazione pubblica di nuovi operatori.
@@ -464,11 +464,11 @@ python eval/run_kpi_eval.py --base-url http://127.0.0.1:8000/api
 Se si esegue da host e mancano dipendenze Python del backend, usare il container:
 
 ```bash
-docker exec tarai-backend sh -lc "rm -rf /app/eval && mkdir -p /app/eval"
-docker cp eval/run_kpi_eval.py tarai-backend:/app/eval/run_kpi_eval.py
-docker cp eval/test_cases.jsonl tarai-backend:/app/eval/test_cases.jsonl
-docker exec tarai-backend python /app/eval/run_kpi_eval.py --base-url http://127.0.0.1:8000/api
-docker cp tarai-backend:/app/eval/outputs/results.csv eval/outputs/results.csv
+docker exec talos-backend sh -lc "rm -rf /app/eval && mkdir -p /app/eval"
+docker cp eval/run_kpi_eval.py talos-backend:/app/eval/run_kpi_eval.py
+docker cp eval/test_dataset.jsonl talos-backend:/app/eval/test_dataset.jsonl
+docker exec talos-backend python /app/eval/run_kpi_eval.py --base-url http://127.0.0.1:8000/api
+docker cp talos-backend:/app/eval/outputs/results.csv eval/outputs/results.csv
 ```
 
 Comandi utili:

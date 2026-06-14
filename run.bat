@@ -19,8 +19,8 @@ exit /b 1
 
 :VALID_MODE
 set "MAX_LINK_WAIT_SECONDS=120"
-set "START_LOG=%TEMP%\tarai_compose_start_%RANDOM%.log"
-set "CF_LOG=%TEMP%\tarai_cloudflare_logs_%RANDOM%.log"
+set "START_LOG=%TEMP%\talos_compose_start_%RANDOM%.log"
+set "CF_LOG=%TEMP%\talos_cloudflare_logs_%RANDOM%.log"
 set "CF_LINK="
 set "COMPOSE_CMD=docker compose"
 
@@ -54,13 +54,13 @@ exit /b 0
 %COMPOSE_CMD% up -d --build --force-recreate --no-deps database pgadmin vector-db > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
-call :WAIT_HEALTH tarai-database 120
+call :WAIT_HEALTH talos-database 120
 if errorlevel 1 goto START_ERROR
 
 %COMPOSE_CMD% up -d --build --force-recreate --no-deps backend frontend cloudflared > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
-call :WAIT_HEALTH tarai-backend 180
+call :WAIT_HEALTH talos-backend 180
 if errorlevel 1 goto START_ERROR
 
 exit /b 0
@@ -70,7 +70,7 @@ exit /b 0
 %COMPOSE_CMD% up -d --build --force-recreate database pgadmin vector-db llm > "%START_LOG%" 2>&1
 if errorlevel 1 goto START_ERROR
 
-call :WAIT_HEALTH tarai-database 120
+call :WAIT_HEALTH talos-database 120
 if errorlevel 1 goto START_ERROR
 
 %COMPOSE_CMD% up --build --force-recreate llm-init

@@ -38,8 +38,8 @@ const initialMessages = [
   },
 ];
 
-const THEME_STORAGE_KEY = "tarai-theme";
-const SUPPORT_EMAIL_STORAGE_KEY = "tarai-support-email";
+const THEME_STORAGE_KEY = "talos-theme";
+const SUPPORT_EMAIL_STORAGE_KEY = "talos-support-email";
 const TICKET_THINKING_MIN_MS = 450;
 
 export function ChatPage() {
