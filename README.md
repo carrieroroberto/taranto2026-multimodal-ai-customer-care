@@ -1,88 +1,83 @@
-# T.A.L.O.S. | Taranto 2026 Live Operator Support
+# T.A.L.O.S. | Taranto 2026
 
-## ChatBot AI Multimodale di Customer-Care per i Giochi del Mediterraneo
+## Chatbot AI Multimodale Di Customer Care Per I Giochi Del Mediterraneo
 
-T.A.L.O.S. è un assistente customer-care multimodale per i Giochi del Mediterraneo di Taranto 2026. Il progetto combina una UI React installabile come PWA, un backend FastAPI e una pipeline RAG basata su ChromaDB, embedding semantici e LLM locale tramite Ollama.
+T.A.L.O.S. e' una web app full-stack per il customer care dei Giochi del Mediterraneo Taranto 2026. Il sistema integra una chat multilingua, una pipeline RAG basata su knowledge base, una dashboard operatore per la gestione dei ticket e un modulo di benchmarking KPI esportabile in CSV.
 
-L'obiettivo è fornire risposte utili, brevi e fondate sulla knowledge base del progetto, evitando di inventare date, prezzi, sedi, risultati live o informazioni non presenti nei dati recuperati.
+L'obiettivo del progetto e' fornire risposte utili, brevi e fondate sulle fonti disponibili nella knowledge base, evitando risposte inventate su date, sedi, biglietti, risultati live o informazioni non presenti nei dati recuperati.
 
-## Stato Attuale
+## Stato Della Consegna
 
-Il progetto è una web app full-stack containerizzata con Docker Compose.
+La versione finale include:
 
-- Frontend React/Vite con Tailwind CSS.
-- Backend FastAPI con endpoint testuali, audio e multimodali.
-- ChromaDB come vector database.
-- Postgres per conversazioni, messaggi, ticket e KPI.
-- Ollama come servizio LLM locale.
-- Groq API supportata per usare LLM e multimodale senza GPU locale.
-- Dashboard operatore protetta da login su `/operator`, con lista ticket, dettaglio conversazione, traduzione, bozza email e chiusura ticket.
-- Runner benchmark KPI in `eval/` per esportare metriche tecniche, informative e operative in `results.csv`.
-- Modello LLM configurato di default: `qwen3:8b`.
-- Modello embedding configurato di default: `BAAI/bge-m3`.
-- Tunnel HTTPS temporaneo con Cloudflare per test da iPhone, PWA e microfono.
-- UI multilingua: italiano, inglese, spagnolo, francese e arabo.
-- Tema chiaro/scuro con lettura automatica del tema di sistema e preferenza salvata in `localStorage`.
+- frontend React/Vite installabile come PWA;
+- backend FastAPI con API testuali, audio e immagine;
+- ChromaDB come vector database;
+- Postgres per conversazioni, messaggi, feedback, operatori, ticket e KPI;
+- pipeline RAG con query planning, retrieval, reranking e generazione finale;
+- supporto LLM locale tramite Ollama;
+- supporto Groq API per uso senza GPU locale;
+- dashboard operatore protetta da login su `/operator`;
+- ticketing da feedback negativo con riuso sicuro dell'email confermata;
+- benchmark KPI in `eval/` con dataset testuale da 130 record;
+- export unico in `eval/outputs/results.csv`;
+- container, network e volumi rinominati con prefisso `talos`.
 
-## Funzionalità
+## Funzionalita Principali
 
-- Chat testuale con risposte generate dal backend.
-- Risposte grounded: il modello deve usare solo i contesti recuperati dalla knowledge base.
-- Query planning LLM per normalizzare la richiesta, gestire lingua, dominio e query di retrieval.
-- Retrieval multi-query su ChromaDB con fallback globale quando il filtro di dominio recupera pochi risultati.
+- Chat testuale multilingua in italiano, inglese, spagnolo, francese e arabo.
+- Risposte grounded sulla knowledge base Taranto 2026.
+- Rilevamento/gestione lingua e risposta nella lingua dell'utente.
+- Query planning LLM per dominio, intento e query di retrieval.
+- Retrieval multi-query su ChromaDB con fallback globale.
 - Reranking leggero dei documenti recuperati.
-- Supporto multilingua della UI e risposta nella lingua selezionata/originaria.
-- Input multimodale:
-  - solo testo;
-  - testo + immagine;
-  - solo audio.
-- Registrazione audio con durata, playback e waveform.
-- Upload immagine da pulsante, drag and drop da tutta la finestra e copia/incolla.
-- Anteprima immagine prima dell'invio e lightbox per ingrandire immagini inviate o in preview.
-- PWA installabile su iPhone e Android.
-- Fonti mostrate come favicon cliccabili dopo le risposte del bot, quando disponibili.
-- Domande suggerite tradotte in base alla lingua della UI.
-- Countdown nell'header.
-- Feedback utente sui messaggi bot e apertura ticket verso operatore umano.
-- Dashboard operatore con filtri, ordinamento, polling automatico nuovi ticket e modal dettaglio.
-- Export benchmark KPI in `eval/outputs/results.csv` tramite un singolo CSV strutturato.
+- Fonti mostrate come favicon cliccabili quando disponibili.
+- Input multimodale: testo, testo + immagine, solo audio.
+- Registrazione audio con playback e waveform.
+- Upload immagine da pulsante, drag and drop e copia/incolla.
+- Anteprima immagine e lightbox.
+- Feedback utente sui messaggi del bot.
+- Apertura ticket verso operatore umano su feedback negativo.
+- Dashboard operatore con login, lista ticket, filtri, dettaglio conversazione, traduzione, bozza email e chiusura ticket.
+- Tema chiaro/scuro e preferenze salvate in `localStorage`.
+- PWA installabile e testabile anche da mobile tramite tunnel HTTPS Cloudflare.
 
 ## Architettura
 
 ```text
-Utente
-  |
-  v
+Utente / Operatore
+      |
+      v
 Frontend React/Vite
-  |
-  |  /api/*
-  v
+      |
+      | /api/*
+      v
 Backend FastAPI
-  |
-  +--> Query Planner LLM
-  |
-  +--> ChromaDB retrieval + reranking
-  |
-  +--> Final Answer LLM
-  |
-  v
-Risposta grounded + fonti
+      |
+      +-- Postgres: conversazioni, messaggi, feedback, ticket, operatori
+      |
+      +-- ChromaDB: retrieval semantico sulla knowledge base
+      |
+      +-- Ollama o Groq: query planning, generazione, multimodale
+      |
+      v
+Risposta grounded + fonti / ticket operatore / KPI
 ```
 
-Servizi Docker principali:
+Servizi Docker:
 
-| Servizio | Ruolo |
-| --- | --- |
-| `frontend` | App React/Vite sulla porta `5173` |
-| `backend` | API FastAPI sulla porta `8000` |
-| `vector-db` | ChromaDB sulla porta `8001` |
-| `database` | Postgres sulla porta host `5433` |
-| `pgadmin` | UI grafica per Postgres sulla porta `5050` |
-| `llm` | Ollama per modelli locali |
-| `llm-init` | Pull automatico dei modelli locali configurati |
-| `cloudflared` | Tunnel HTTPS temporaneo `trycloudflare.com` |
+| Servizio | Container | Porta host | Ruolo |
+| --- | --- | --- | --- |
+| `frontend` | `talos-frontend` | `5173` | App React/Vite |
+| `backend` | `talos-backend` | `8000` | API FastAPI |
+| `vector-db` | `talos-vector-db` | `8001` | ChromaDB |
+| `database` | `talos-database` | `5433` | Postgres |
+| `pgadmin` | `talos-pgadmin` | `5050` | UI database |
+| `llm` | `talos-llm` | `11434` | Ollama locale |
+| `llm-init` | `talos-llm-init` | - | Pull modelli Ollama |
+| `cloudflared` | `talos-cloudflared` | - | Tunnel HTTPS temporaneo |
 
-## Struttura Del Repository
+## Struttura Repository
 
 ```text
 .
@@ -90,50 +85,51 @@ Servizi Docker principali:
 │   ├── app/
 │   │   ├── api/              # Route FastAPI
 │   │   ├── repositories/     # Postgres e ChromaDB
-│   │   ├── schemas/          # Schemi request/response
-│   │   ├── services/         # RAG, LLM, OCR, ASR, visione, ticket
+│   │   ├── schemas/          # DTO request/response
+│   │   ├── services/         # RAG, LLM, multimodale, ticket
 │   │   ├── config.py
 │   │   └── main.py
 │   ├── data/
-│   │   └── kb.jsonl          # Knowledge base indicizzata
+│   │   └── kb.jsonl          # Knowledge base
 │   ├── db/
 │   │   └── init.sql          # Schema iniziale Postgres
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── eval/
-│   ├── run_kpi_eval.py      # Runner benchmark KPI
-│   └── test_cases.jsonl     # Dataset ground truth per valutazione
+│   ├── run_kpi_eval.py       # Runner benchmark KPI
+│   ├── test_dataset.jsonl    # Dataset testuale di valutazione
+│   └── outputs/
+│       └── results.csv       # Output CSV generato/sovrascritto
 ├── frontend/
-│   ├── public/
-│   │   ├── icons/            # Icone PWA e fallback favicon fonti
-│   │   └── manifest.json
+│   ├── public/               # Manifest PWA, icone, asset pubblici
 │   ├── src/
-│   │   ├── assets/           # Asset importati da React
-│   │   ├── components/       # Componenti UI
-│   │   ├── pages/            # Chat e dashboard operatore
+│   │   ├── components/
+│   │   ├── pages/            # ChatPage e OperatorDashboardPage
 │   │   ├── services/         # Client API frontend
-│   │   ├── utils/            # Utility frontend
+│   │   ├── utils/
 │   │   ├── i18n.js
 │   │   ├── main.jsx
 │   │   └── styles.css
 │   ├── package.json
 │   └── Dockerfile
 ├── docker-compose.yml
+├── run.bat
 ├── .env.example
 └── README.md
 ```
 
 ## Requisiti
 
-- Docker e Docker Compose.
-- Una GPU NVIDIA compatibile e runtime Docker NVIDIA se si usa il servizio Ollama locale con accelerazione GPU.
-- Spazio disco sufficiente per modelli LLM, embedding e volumi Docker.
+- Docker Desktop con Docker Compose.
+- Groq API key per usare la modalita' senza GPU locale.
+- GPU NVIDIA e runtime Docker NVIDIA solo per la modalita' completa con Ollama locale.
+- Spazio disco sufficiente per modelli, cache embedding, volumi Postgres e ChromaDB.
 
-Il primo avvio puo' richiedere tempo per scaricare i modelli e inizializzare i dati.
+Il primo avvio puo' richiedere alcuni minuti per scaricare immagini Docker, inizializzare i volumi e indicizzare la knowledge base.
 
 ## Configurazione
 
-Copiare il file di esempio:
+Creare il file `.env` partendo dall'esempio:
 
 ```powershell
 Copy-Item .env.example .env
@@ -149,106 +145,76 @@ Variabili principali:
 
 | Variabile | Descrizione |
 | --- | --- |
-| `COLLECTION_NAME` | Nome collezione ChromaDB |
-| `POSTGRES_DB` | Nome database Postgres |
-| `POSTGRES_USER` | Utente Postgres |
+| `POSTGRES_DB` | Database Postgres, default `talos` |
+| `POSTGRES_USER` | Utente Postgres, default `talos` |
 | `POSTGRES_PASSWORD` | Password Postgres di sviluppo |
-| `POSTGRES_HOST_PORT` | Porta host per Postgres, di default `5433` |
 | `DATABASE_URL` | URL Postgres per esecuzione backend fuori Docker |
-| `PGADMIN_DEFAULT_EMAIL` | Email di login pgAdmin |
-| `PGADMIN_DEFAULT_PASSWORD` | Password di login pgAdmin |
-| `PGADMIN_HOST_PORT` | Porta host pgAdmin, di default `5050` |
-| `DEFAULT_OPERATOR_EMAIL` | Operatore demo creato automaticamente |
-| `DEFAULT_OPERATOR_PASSWORD` | Password demo hashata nel DB |
+| `COLLECTION_NAME` | Nome collezione ChromaDB |
+| `KB_PATH` | Path knowledge base |
 | `EMBEDDING_MODEL` | Modello embedding |
 | `N_RESULTS` | Numero base di risultati recuperati |
-| `OLLAMA_MODEL` | Modello usato dal backend |
-| `QUERY_PARSER_MODEL` | Modello usato dal query planner |
-| `USE_LLM_QUERY_PARSER` | Abilita il planner LLM |
-| `AI_DISABLED` | Disattiva i modelli AI. Per usare Groq/API con RAG e multimodale deve restare `false` |
-| `GROQ_API_KEY` | Chiave Groq per query planner, generazione testuale, trascrizione e vision via API |
+| `AUTO_INGEST_ON_STARTUP` | Ingest automatico knowledge base all'avvio |
+| `FORCE_REINGEST_ON_STARTUP` | Reindicizzazione forzata a ogni avvio |
+| `OLLAMA_MODEL` | Modello LLM locale |
+| `QUERY_PARSER_MODEL` | Modello per query planning |
+| `VISION_MODEL` | Modello vision locale |
+| `GROQ_API_KEY` | Chiave Groq |
 | `GROQ_MODEL` | Modello Groq testuale |
-| `GROQ_VISION_MODEL` | Modello Groq usato per descrivere immagini |
-| `GROQ_TRANSCRIPTION_MODEL` | Modello Groq usato per trascrivere audio |
-| `LLM_FALLBACK_TIMEOUT_SECONDS` | `0` forza Groq diretto; un valore maggiore prova prima Ollama e poi Groq |
-| `MULTIMODAL_PROVIDER` | `groq`, `local` o `auto` per audio/vision |
-| `VISION_MODEL` | Modello vision locale Ollama, di default `moondream` |
-| `VITE_API_BASE_URL` | Base API del frontend, di default `/api` |
-| `VITE_PROXY_TARGET` | Target proxy Vite verso il backend |
+| `GROQ_VISION_MODEL` | Modello Groq vision |
+| `GROQ_TRANSCRIPTION_MODEL` | Modello Groq audio |
+| `LLM_FALLBACK_TIMEOUT_SECONDS` | Timeout prima del fallback Groq |
+| `MULTIMODAL_PROVIDER` | `groq`, `local` o `auto` |
+| `VITE_API_BASE_URL` | Base API frontend, default `/api` |
+| `VITE_PROXY_TARGET` | Target proxy Vite verso backend |
 
-Non inserire IP locali hardcoded nel frontend. Le chiamate devono passare da path relativi come `/api/chat`.
+Non inserire IP o URL backend assoluti nel frontend. Le chiamate React devono usare path relativi come `/api/chat`.
 
-## Avvio Con Docker
+## Avvio Rapido
 
-Il progetto Docker Compose usa il nome progetto `talos`, quindi rete e risorse Compose vengono isolate sotto quel nome.
-
-Su Windows si puo' usare lo script rapido:
-
-```bat
-run.bat
-```
-
-Di default equivale alla modalita' completa:
-
-```bat
-run.bat full
-```
-
-Per usare Groq API per testo e multimodalita', senza Ollama locale:
+Su Windows:
 
 ```bat
 run.bat lite
 ```
 
-La modalita' `lite` avvia frontend, backend, Postgres, pgAdmin, ChromaDB e tunnel Cloudflare, ma non avvia `llm` e `llm-init`. Imposta `AI_DISABLED=false`, `MULTIMODAL_PROVIDER=groq` e `LLM_FALLBACK_TIMEOUT_SECONDS=0`, quindi usa Groq per query planner, risposta finale, trascrizione audio e vision immagini quando `GROQ_API_KEY` e' configurata.
+La modalita' `lite` e' consigliata per demo e consegna se e' configurata `GROQ_API_KEY`. Avvia frontend, backend, Postgres, pgAdmin, ChromaDB e Cloudflare, senza avviare Ollama locale.
 
-Per la versione completa con modelli AI locali:
+Per la modalita' completa con Ollama:
 
 ```bat
 run.bat full
 ```
 
-La modalita' `full` avvia anche Ollama con accelerazione NVIDIA dal compose principale, verifica/scarica il modello testuale e il modello vision configurati e usa i modelli locali come percorso principale. Groq resta solo fallback del testo in base a `LLM_FALLBACK_TIMEOUT_SECONDS`, impostato dallo script a `40` secondi.
-
-Il progetto mantiene un solo `docker-compose.yml`. In `lite` il servizio `llm` non viene avviato, quindi il requisito GPU non viene coinvolto.
-
-Dalla root del progetto:
+Con Docker Compose:
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
 
-Aprire da PC:
+Link locali:
 
-- Frontend: <http://localhost:5173>
+- Chat: <http://localhost:5173>
 - Dashboard operatore: <http://localhost:5173/operator>
-- Backend API docs: <http://localhost:8000/docs>
+- API docs: <http://localhost:8000/docs>
+- Health backend: <http://localhost:8000/health>
 - ChromaDB: <http://localhost:8001>
-- Postgres: `localhost:5433`
 - pgAdmin: <http://localhost:5050>
+- Postgres: `localhost:5433`
 
-Accesso pgAdmin di sviluppo:
+Accesso pgAdmin:
 
 - Email: `admin@talos.com`
 - Password: `ChatbotTaranto2026!`
 
-Per collegare il database in pgAdmin:
+Connessione Postgres da pgAdmin:
 
-- Host name/address: `database`
+- Host: `database`
 - Port: `5432`
 - Maintenance database: `talos`
 - Username: `talos`
 - Password: `ChatbotTaranto2026!`
 
-Se si accede a Postgres da strumenti installati sul PC, usare invece host `localhost` e porta `5433`.
-
-Log utili:
-
-```bash
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f cloudflared
-```
+Da strumenti installati sul PC usare host `localhost` e porta `5433`.
 
 Per fermare i servizi:
 
@@ -256,19 +222,13 @@ Per fermare i servizi:
 docker compose down
 ```
 
-Evitare `docker compose down -v` se non si vogliono cancellare volumi, modelli e dati indicizzati.
+Evitare `docker compose down -v` se non si vogliono cancellare database, modelli, upload e indice ChromaDB.
 
-## Accesso Da iPhone, Android E PWA
+## Accesso Mobile E PWA
 
-Safari iOS richiede HTTPS per usare il microfono e per una PWA in modalità standalone. Per questo il progetto include `cloudflared`.
+Per microfono e PWA su iPhone serve HTTPS. Il servizio `cloudflared` crea un tunnel temporaneo.
 
-Avviare tutto:
-
-```bash
-docker compose up --build
-```
-
-Poi leggere l'URL HTTPS temporaneo dai log:
+Visualizzare il link:
 
 ```bash
 docker compose logs -f cloudflared
@@ -282,16 +242,15 @@ https://nome-casuale.trycloudflare.com
 
 Da iPhone:
 
-1. Aprire quell'URL in Safari.
-2. Verificare chat e microfono.
-3. Per installare la PWA: Condividi -> Aggiungi alla schermata Home.
-4. Aprire T.A.L.O.S. dall'icona installata.
+1. Aprire l'URL in Safari.
+2. Testare chat, audio e immagini.
+3. Installare la PWA da Condividi -> Aggiungi alla schermata Home.
 
-Il tunnel gratuito è temporaneo: a ogni riavvio puo' cambiare URL.
+Il link gratuito `trycloudflare.com` cambia a ogni riavvio del tunnel.
 
 ## API Principali
 
-Le API sono esposte dal backend e raggiunte dal frontend tramite proxy `/api`.
+Le API sono esposte anche con prefisso `/api`, usato dal frontend tramite proxy Vite.
 
 ### Health
 
@@ -311,29 +270,32 @@ Esempio:
 
 ```json
 {
-  "message": "Quando iniziano i Giochi del Mediterraneo di Taranto 2026?",
+  "message": "Dove si svolge il nuoto a Taranto 2026?",
   "session_id": "sessione-demo",
   "language": "it"
 }
 ```
 
-La risposta include anche gli identificativi persistiti:
+La risposta include:
 
-- `conversation_id`
-- `user_message_id`
-- `bot_message_id`
-
-Questi ID collegano ogni turno della chat alle tabelle `conversations` e `messages`.
-Ogni riga in `messages` contiene anche `type`, valorizzato con `text`, `image` o `audio`.
+- `conversation_id`;
+- `user_message_id`;
+- `bot_message_id`;
+- `answer`;
+- `sources`;
+- `should_escalate`;
+- `ticket_draft`, quando applicabile.
 
 ### Conversazioni
 
 ```http
 POST /api/conversations
 GET /api/conversations/{session_id}/messages
+POST /api/conversations/{session_id}/messages
+DELETE /api/conversations/{session_id}/messages
 ```
 
-Il frontend crea o recupera una conversazione usando il `session_id` salvato in `localStorage`. Alla riapertura del browser o della PWA, la stessa sessione viene riutilizzata e i messaggi precedenti vengono ricaricati.
+Il frontend salva un `session_id` in `localStorage`, riusa la conversazione alla riapertura della PWA e ricarica i messaggi persistiti da Postgres.
 
 ### Chat Audio
 
@@ -344,8 +306,8 @@ Content-Type: multipart/form-data
 
 Campi:
 
-- `file`: file audio registrato.
-- `session_id`: opzionale.
+- `file`: file audio;
+- `session_id`: opzionale;
 - `language`: opzionale.
 
 ### Chat Multimodale
@@ -355,18 +317,29 @@ POST /api/chat/multimodal
 Content-Type: multipart/form-data
 ```
 
-Campi principali:
+Campi:
 
-- `message`: testo dell'utente.
-- `file`: file immagine o audio.
-- `session_id`: opzionale.
+- `message`: testo dell'utente, richiesto per immagine;
+- `file`: file immagine o audio;
+- `session_id`: opzionale;
 - `language`: opzionale.
 
-Il frontend applica già le combinazioni consentite:
+Il frontend consente tre combinazioni: testo, testo + immagine, solo audio.
 
-- testo;
-- testo + immagine;
-- audio.
+### Feedback
+
+```http
+PATCH /api/messages/{message_id}/feedback
+POST /api/feedback
+```
+
+Il feedback valorizza `messages.satisfaction` sui messaggi bot:
+
+- `true`: risposta utile;
+- `false`: risposta non utile;
+- `null`: feedback rimosso.
+
+Il feedback negativo puo' attivare il flusso di ticket verso operatore.
 
 ### Ticket
 
@@ -375,34 +348,44 @@ POST /api/tickets
 Content-Type: application/json
 ```
 
+Esempio:
+
+```json
+{
+  "conversation_id": "uuid-conversazione",
+  "escalated_message_id": "uuid-messaggio-bot",
+  "user_email": "utente@example.com",
+  "language": "it"
+}
+```
+
 Il ticket viene salvato in Postgres nella tabella `tickets` e collegato alla conversazione.
 
-Operatore demo creato automaticamente:
+## Dashboard Operatore
 
-- Email: `operatore@talos.it`
-- Password: `OperatoreTaranto2026!`
-
-La password viene salvata nella tabella `operators` come hash generato da `pgcrypto`; non viene salvata in chiaro. Non e' prevista registrazione pubblica di nuovi operatori.
-
-### Dashboard Operatore
-
-La dashboard e' disponibile nel frontend al path:
+Path frontend:
 
 ```text
 /operator
 ```
 
-Funzioni principali:
+Operatore demo:
 
-- login/logout operatore con JWT;
-- lista ticket con filtri per stato, ordinamento e modalita' card/lista;
-- polling automatico dei nuovi ticket;
-- dettaglio ticket con conversazione associata e media allegati;
+- Email: `operatore@talos.it`
+- Password: `OperatoreTaranto2026!`
+
+Funzioni disponibili:
+
+- login/logout con JWT;
+- lista ticket con filtri e ordinamento;
+- modal dettaglio ticket con conversazione completa;
+- visualizzazione media allegati;
 - traduzione della conversazione;
-- generazione bozza email di risposta;
-- chiusura ticket da modal dettaglio.
+- generazione bozza email;
+- chiusura e riapertura ticket;
+- polling automatico dei nuovi ticket.
 
-Route principali usate dalla dashboard:
+Route usate dalla dashboard:
 
 ```http
 POST /api/operator/login
@@ -415,53 +398,55 @@ POST /api/operator/tickets/{ticket_id}/email-draft
 PATCH /api/operator/tickets/{ticket_id}/status
 ```
 
-### KPI
+## KPI Database
 
 ```http
 GET /api/kpis
 ```
 
-Restituisce conteggi aggregati da `conversations`, `messages` e `tickets`, inclusi ticket per stato e feedback positivo/negativo. La route espone metriche operative cumulative del database; per benchmark riproducibili usare anche il runner `eval/run_kpi_eval.py`.
+La route restituisce metriche cumulative lette dal database:
 
-### Feedback
+- conversazioni totali;
+- messaggi totali;
+- messaggi utente;
+- messaggi bot;
+- ticket totali;
+- ticket aperti;
+- ticket chiusi;
+- feedback positivi;
+- feedback negativi;
+- messaggi valutati;
+- satisfaction rate.
 
-```http
-POST /api/feedback
-```
+Questa route descrive lo stato del database. Per test riproducibili e risultati da relazione usare il runner in `eval/`.
 
-Il feedback aggiorna `messages.satisfaction` sul messaggio bot selezionato: `true` per pollice su, `false` per pollice giu'. Il valore iniziale nel database resta `NULL`.
-Per vincolo DB, `satisfaction` puo' essere valorizzato solo su righe `role = 'bot'`; sui messaggi utente resta sempre `NULL`.
+## Benchmark KPI E CSV
 
-## Benchmark KPI E Export CSV
+La cartella `eval/` contiene un runner esterno che misura KPI informativi, tecnici e operativi senza modificare chatbot e dashboard.
 
-La cartella `eval/` contiene una soluzione esterna per misurare KPI tecnici,
-informativi e operativi senza modificare il funzionamento del chatbot o della
-dashboard operatore.
+File principali:
 
-Il runner usa due fonti:
+| File | Descrizione |
+| --- | --- |
+| `eval/run_kpi_eval.py` | Script Python di benchmark |
+| `eval/test_dataset.jsonl` | Dataset testuale da 130 record |
+| `eval/outputs/results.csv` | CSV finale generato/sovrascritto |
 
-- API HTTP esistenti: `/api/chat`, `/api/messages/{message_id}/feedback`,
-  `/api/tickets`, `/api/kpis`;
-- import read-only dei servizi backend per le metriche retrieval top-5:
-  `build_query_plan()` e `retrieve_context()`.
+Il dataset contiene casi in piu' lingue, domini informativi diversi, feedback positivi e negativi, casi con ticket e casi senza escalation. Non contiene input audio o immagine; per questo il benchmark finale non include un KPI ASR/OCR.
 
-Output predefinito:
-
-```text
-eval/outputs/results.csv
-```
-
-`results.csv` viene sovrascritto a ogni run e contiene solo le colonne
-`kpi`, `description`, `value` e `unit`.
-`eval/outputs/` e' ignorata da Git per non versionare risultati di benchmark locali.
-
-Uso rapido, con backend, database e ChromaDB gia' avviati:
+Esecuzione con backend gia' avviato:
 
 ```bash
 python eval/run_kpi_eval.py --base-url http://127.0.0.1:8000/api
 ```
 
-Se si esegue da host e mancano dipendenze Python del backend, usare il container:
+Validazione dataset:
+
+```bash
+python eval/run_kpi_eval.py --validate-only
+```
+
+Esecuzione da container backend:
 
 ```bash
 docker exec talos-backend sh -lc "rm -rf /app/eval && mkdir -p /app/eval"
@@ -471,83 +456,59 @@ docker exec talos-backend python /app/eval/run_kpi_eval.py --base-url http://127
 docker cp talos-backend:/app/eval/outputs/results.csv eval/outputs/results.csv
 ```
 
-Comandi utili:
+Opzioni utili:
 
 ```bash
-# valida solo il dataset
-python eval/run_kpi_eval.py --validate-only
-
-# solo metriche HTTP e KPI database
-python eval/run_kpi_eval.py --skip-retrieval
-
-# solo metriche retrieval, senza chiamare il chatbot
-python eval/run_kpi_eval.py --skip-chat --skip-kpi-snapshot
-
-# ripete ogni domanda 3 volte per stabilizzare la latenza
+# ripete ogni domanda per stabilizzare la latenza
 python eval/run_kpi_eval.py --repeat 3
 
-# scrive feedback di test sui messaggi bot generati
+# calcola solo retrieval, senza chiamare il chatbot
+python eval/run_kpi_eval.py --skip-chat --skip-kpi-snapshot
+
+# calcola solo chat/API, senza retrieval
+python eval/run_kpi_eval.py --skip-retrieval
+
+# scrive feedback sui messaggi generati
 python eval/run_kpi_eval.py --post-feedback
 
 # scrive feedback negativi e apre ticket sui casi marcati open_ticket=true
 python eval/run_kpi_eval.py --post-feedback --post-tickets
 ```
 
-Per una relazione finale riproducibile, usare un database pulito o un database
-dedicato alla run di benchmark.
+Formato output:
 
-Il dataset `eval/test_cases.jsonl` contiene una domanda per riga:
-
-```json
-{
-  "id": "venue_canoe_001",
-  "message": "Dove si svolge la canoa kayak a Taranto 2026?",
-  "language": "it",
-  "expected_domain": "venue",
-  "relevant_doc_ids": ["sport_canoa_kayak"],
-  "expected_escalation": false,
-  "feedback": true
-}
+```csv
+kpi,description,value,unit
+Domain Accuracy,Capacita di classificare correttamente il dominio della domanda,0.9262,percent
+Recall@5,Almeno un documento corretto tra i primi 5 risultati,0.7951,ratio
 ```
 
-Il dataset attuale e' testuale. Per simulare escalation operative senza
-alterare chatbot o dashboard, alcuni casi usano feedback negativo e
-`open_ticket: true`; con `--post-tickets` il runner apre un ticket tramite la
-route pubblica `/api/tickets`.
+Il CSV contiene solo quattro colonne:
 
-```json
-{
-  "id": "edge_payment_problem_129",
-  "modality": "text",
-  "message": "Il pagamento online del biglietto non funziona...",
-  "language": "it",
-  "expected_domain": "ticketing",
-  "relevant_doc_ids": ["ticketing_general_taranto_2026"],
-  "feedback": false,
-  "open_ticket": true,
-  "user_email": "kpi.eval+payment@example.com"
-}
-```
+- `kpi`;
+- `description`;
+- `value`;
+- `unit`.
 
-KPI calcolati:
+Per una relazione finale riproducibile e' consigliato usare un database dedicato alla run o ripartire da uno stato noto.
 
-| Macroarea | KPI | Fonte |
+## KPI Calcolati
+
+| Macroarea | KPI | Formula |
 | --- | --- | --- |
-| Qualita informativa | Domain Accuracy | Retrieval |
-| Qualita informativa | Recall@5 | Retrieval |
-| Qualita informativa | Precision@5 | Retrieval |
-| Qualita informativa | MRR | Retrieval |
-| Qualita informativa | Source Coverage Rate | API/Retrieval |
-| Performance tecnica | Average Latency | Backend/API |
-| Performance tecnica | p95 Latency | Backend/API |
-| Performance tecnica | Error Rate | Backend/API |
-| Impatto operativo | Containment Rate | API/Database |
-| Impatto operativo | Escalation Rate | API/Database |
-| Impatto operativo | Feedback Score | Database |
+| Qualita informativa | Domain Accuracy | `domini_corretti / casi_con_dominio_atteso` |
+| Qualita informativa | Recall@5 | `casi_con_almeno_un_doc_rilevante_in_top5 / casi_valutati` |
+| Qualita informativa | Precision@5 | `media(|top5 ∩ rilevanti| / 5)` |
+| Qualita informativa | MRR | `media(1 / rank_primo_documento_rilevante)` |
+| Qualita informativa | Source Coverage Rate | `risposte_con_fonti / risposte_valide` |
+| Performance tecnica | Average Latency | `somma_latenze / richieste` |
+| Performance tecnica | p95 Latency | `95esimo percentile delle latenze` |
+| Performance tecnica | Error Rate | `richieste_fallite / richieste_totali` |
+| Impatto operativo | Escalation Rate | `conversazioni_con_ticket_o_escalation / conversazioni_valide` |
+| Impatto operativo | Containment Rate | `1 - escalation_rate` |
+| Impatto operativo | Feedback Score | `feedback_positivi / feedback_totali` |
 
 ## Sviluppo Frontend
-
-Il frontend è un progetto React/Vite.
 
 ```bash
 cd frontend
@@ -555,127 +516,158 @@ npm install
 npm run dev
 ```
 
-La configurazione Vite espone l'app su `0.0.0.0:5173` e inoltra `/api` al backend.
+Build:
 
-Note di sviluppo:
+```bash
+npm run build
+```
 
-- Non usare URL backend assoluti come `http://localhost:8000` nel codice React.
-- Usare sempre `/api/...`.
-- Gli asset importati dai componenti stanno in `frontend/src/assets`.
-- I file statici pubblici, manifest PWA e icone installabili stanno in `frontend/public`.
+Regole importanti:
+
+- usare sempre `/api/...` come base chiamate;
+- non inserire `http://localhost:8000` nel codice React;
+- gli asset importati dai componenti stanno in `frontend/src/assets`;
+- manifest PWA e icone pubbliche stanno in `frontend/public`.
 
 ## Sviluppo Backend
 
-Il backend è basato su FastAPI.
+Il backend e' basato su FastAPI.
 
-Responsabilità principali:
+Responsabilita principali:
 
 - validazione request/response;
-- gestione sessione;
+- gestione conversazioni e sessioni;
+- persistenza messaggi e feedback;
 - trascrizione audio;
-- analisi immagine/OCR quando disponibile;
-- query planning LLM;
+- OCR/vision per immagini;
+- query planning;
 - retrieval e reranking;
-- generazione della risposta finale;
-- ticketing e feedback utente;
-- autenticazione operatore e API dashboard;
-- aggregazione KPI e metriche operative.
+- generazione risposta finale;
+- ticketing;
+- autenticazione operatore;
+- aggregazione KPI.
 
 In Docker il backend comunica con:
 
 - ChromaDB tramite `vector-db:8000`;
 - Postgres tramite `database:5432`;
-- Ollama tramite `llm:11434`.
+- Ollama tramite `llm:11434`, se avviato.
 
-Per modifiche backend durante lo sviluppo puo' essere necessario riavviare il container:
+Riavvio backend:
 
 ```bash
 docker compose restart backend
 ```
 
+Log backend:
+
+```bash
+docker compose logs -f backend
+```
+
 ## Knowledge Base E Retrieval
 
-La knowledge base viene indicizzata in ChromaDB e interrogata dal RAG service.
+La knowledge base principale e' `backend/data/kb.jsonl`.
 
-La pipeline desiderata è:
+Pipeline RAG:
 
-1. analisi della query utente tramite LLM planner;
-2. normalizzazione/traduzione semantica della query per il retrieval;
-3. retrieval multi-query su ChromaDB;
-4. fallback globale se il filtro di dominio recupera pochi risultati;
-5. merge, deduplicazione e reranking;
-6. generazione finale usando solo i contesti recuperati.
+1. ricezione messaggio utente;
+2. analisi tramite query planner;
+3. normalizzazione lingua/dominio;
+4. retrieval multi-query su ChromaDB;
+5. fallback globale se il filtro per dominio e' povero;
+6. merge e deduplicazione risultati;
+7. reranking;
+8. generazione finale vincolata ai contesti recuperati.
 
-La logica Python non dovrebbe dipendere da lunghi dizionari hardcoded di sport, città, sinonimi o keyword. Alias, varianti e metadati dovrebbero stare nella knowledge base.
+Alias, varianti e metadati informativi dovrebbero stare nella knowledge base, non in lunghi dizionari hardcoded nel codice.
 
-## Convenzioni Importanti
+## Comandi Di Verifica
 
-- Il frontend deve usare solo path relativi `/api`.
-- Il backend deve evitare risposte inventate se il dato non è nel contesto.
-- Le fonti devono essere mostrate solo se il backend le restituisce.
-- Il messaggio iniziale della UI non mostra fonti.
-- I messaggi di errore non mostrano fonti.
-- Il microfono su iOS va testato da HTTPS, quindi tramite URL Cloudflare.
-- Le preferenze UI di tema e lingua vengono salvate in `localStorage`.
+Stato container:
+
+```bash
+docker compose ps
+```
+
+Health backend:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+KPI database:
+
+```bash
+curl http://127.0.0.1:8000/api/kpis
+```
+
+Build frontend:
+
+```bash
+docker exec talos-frontend npm run build
+```
+
+Login operatore da UI:
+
+```text
+http://localhost:5173/operator
+```
 
 ## Troubleshooting
 
-### Il frontend è bianco
-
-Controllare i log:
+### Il frontend non si apre
 
 ```bash
 docker compose logs -f frontend
-```
-
-Poi ricostruire:
-
-```bash
-docker compose up --build frontend
+docker compose up -d --build --force-recreate frontend
 ```
 
 ### Il backend non risponde
-
-Controllare:
 
 ```bash
 docker compose logs -f backend
 docker compose ps
 ```
 
-Verificare anche che ChromaDB e Ollama siano avviati.
+Verificare che `talos-database` sia `healthy` e che `talos-vector-db` sia avviato.
 
-### Il modello non è pronto
+### La knowledge base non sembra aggiornata
 
-Al primo avvio `llm-init` scarica il modello configurato. Finchè il modello non è disponibile, alcune risposte possono fallire.
+Impostare temporaneamente:
+
+```env
+FORCE_REINGEST_ON_STARTUP=true
+```
+
+Poi riavviare il backend:
 
 ```bash
-docker compose logs -f llm-init
-docker compose logs -f llm
+docker compose restart backend
 ```
+
+Al termine, riportare `FORCE_REINGEST_ON_STARTUP=false`.
 
 ### Il microfono non funziona su iPhone
 
-Usare l'URL HTTPS generato da `cloudflared`, non `http://localhost` e non un IP locale.
+Usare l'URL HTTPS di Cloudflare, non `localhost` e non un IP locale:
 
 ```bash
 docker compose logs -f cloudflared
 ```
 
-### Voglio pulire tutto
+### Voglio cancellare tutto
 
-Solo se si vuole cancellare anche dati e cache:
+Solo se si vogliono eliminare anche volumi, database, cache, upload e indice:
 
 ```bash
 docker compose down -v
 ```
 
-Questa operazione rimuove i volumi Docker e puo' richiedere un nuovo download/ingestion.
-
 ## Limiti Noti
 
-- Il sistema non fornisce risultati live, medagliere live, parcheggi in tempo reale o disponibilità biglietti personali se non integrati con fonti esterne dedicate.
-- Le risposte dipendono dalla qualità e copertura della knowledge base indicizzata.
-- Il tunnel `trycloudflare.com` gratuito è temporaneo.
-- La pipeline multimodale prepara audio e immagini per il backend, ma accuratezza ASR/OCR/vision dipende dai moduli configurati.
-- Il progetto non va considerato pronto per produzione senza hardening di sicurezza, autenticazione, rate limit, logging strutturato e monitoraggio.
+- Il sistema non fornisce risultati live, medagliere live, disponibilita biglietti personali o informazioni in tempo reale se non integrate da fonti esterne dedicate.
+- Le risposte dipendono dalla copertura e qualita della knowledge base.
+- Il tunnel gratuito `trycloudflare.com` e' temporaneo.
+- Accuratezza audio, OCR e vision dipende dal provider configurato.
+- La configurazione e' pensata per sviluppo, demo e consegna progettuale; per produzione servono hardening sicurezza, gestione segreti, rate limit, logging strutturato, monitoraggio e backup.
