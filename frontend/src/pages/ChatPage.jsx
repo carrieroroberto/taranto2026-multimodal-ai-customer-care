@@ -80,9 +80,9 @@ export function ChatPage() {
         const persistedMessages = restorePersistedEscalationState(
           payload.messages.map(mapPersistedMessage),
         );
-        const persistedSupportEmail = findLatestSupportEmail(persistedMessages);
+        const persistedSupportEmail = findConfirmedSupportEmail(persistedMessages);
         if (persistedSupportEmail) {
-          storeSupportEmail(persistedSupportEmail);
+          storeSupportEmail(persistedSupportEmail, { overwrite: true });
         }
         
         if (persistedMessages.length > 0) {
@@ -934,25 +934,37 @@ function getStoredSupportEmail() {
   return window.localStorage.getItem(SUPPORT_EMAIL_STORAGE_KEY) || "";
 }
 
-function storeSupportEmail(value) {
+function storeSupportEmail(value, options = {}) {
   if (typeof window === "undefined") {
-    return;
+    return "";
   }
   const email = String(value || "").trim();
   if (isValidEmail(email)) {
+    const currentEmail = getStoredSupportEmail();
+    if (!options.overwrite && isValidEmail(currentEmail)) {
+      return currentEmail;
+    }
     window.localStorage.setItem(SUPPORT_EMAIL_STORAGE_KEY, email);
+    return email;
   }
+  return "";
 }
 
-function findLatestSupportEmail(messages) {
-  const emailMessage = [...messages]
-    .reverse()
-    .find((message) => message?.role === "user" && isValidEmail(message.text));
-  return emailMessage ? String(emailMessage.text || "").trim() : "";
+function findConfirmedSupportEmail(messages) {
+  const ticketSuccessMessage = messages.find(
+    (message) => message?.role === "assistant" && isTicketSuccessText(message.text),
+  );
+  return ticketSuccessMessage ? extractEmailFromText(ticketSuccessMessage.text) : "";
+}
+
+function extractEmailFromText(value) {
+  const match = String(value || "").match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const email = match ? match[0].trim() : "";
+  return isValidEmail(email) ? email : "";
 }
 
 function getKnownSupportEmail(messages) {
-  return findLatestSupportEmail(messages) || getStoredSupportEmail();
+  return findConfirmedSupportEmail(messages) || getStoredSupportEmail();
 }
 
 function findEscalationPersistedMessageId(messages, flowId) {
