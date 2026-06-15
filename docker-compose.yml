@@ -23,7 +23,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-talos}
       POSTGRES_USER: ${POSTGRES_USER:-talos}
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-ChatbotTaranto2026!}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
     healthcheck:
       test:
         [
@@ -43,8 +43,8 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@talos.com}
-      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_DEFAULT_PASSWORD:-ChatbotTaranto2026!}"
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?PGADMIN_DEFAULT_EMAIL is required}
+      PGADMIN_DEFAULT_PASSWORD: "${PGADMIN_DEFAULT_PASSWORD:?PGADMIN_DEFAULT_PASSWORD is required}"
       PGADMIN_CONFIG_SERVER_MODE: "False"
     depends_on:
       database:
@@ -137,7 +137,7 @@ services:
       LLM_FALLBACK_TIMEOUT_SECONDS: ${LLM_FALLBACK_TIMEOUT_SECONDS:-40}
       MULTIMODAL_PROVIDER: ${MULTIMODAL_PROVIDER:-auto}
       VISION_MODEL: ${VISION_MODEL:-moondream}
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-talos}:${POSTGRES_PASSWORD:-ChatbotTaranto2026!}@database:5432/${POSTGRES_DB:-talos}"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-talos}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@database:5432/${POSTGRES_DB:-talos}"
       HF_HOME: /models/huggingface
       PYTHONPATH: /app
     command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000

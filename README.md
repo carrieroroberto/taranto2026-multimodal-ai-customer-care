@@ -131,8 +131,8 @@ Variabili principali:
 | --- | --- |
 | `POSTGRES_DB` | Database Postgres, default `talos` |
 | `POSTGRES_USER` | Utente Postgres, default `talos` |
-| `POSTGRES_PASSWORD` | Password Postgres di sviluppo |
-| `DATABASE_URL` | URL Postgres per esecuzione backend fuori Docker |
+| `POSTGRES_PASSWORD` | Password Postgres DB |
+| `DATABASE_URL` | URL Postgres per backend |
 | `COLLECTION_NAME` | Nome collezione ChromaDB |
 | `KB_PATH` | Path knowledge base |
 | `EMBEDDING_MODEL` | Modello embedding |
@@ -186,20 +186,9 @@ Link locali:
 - pgAdmin: <http://localhost:5050>
 - Postgres: `localhost:5433`
 
-Accesso pgAdmin:
+Connessione Postgres e pgAdmin:
 
-- Email: `admin@talos.com`
-- Password: `ChatbotTaranto2026!`
-
-Connessione Postgres da pgAdmin:
-
-- Host: `database`
-- Port: `5432`
-- Maintenance database: `talos`
-- Username: `talos`
-- Password: `ChatbotTaranto2026!`
-
-Da strumenti installati sul PC usare host `localhost` e porta `5433`.
+- Utilizzare i parametri inseriti nel file `.env`.
 
 Per fermare i servizi:
 
@@ -353,11 +342,6 @@ Path frontend:
 ```text
 /operator
 ```
-
-Operatore Default:
-
-- Email: `operatore@talos.it`
-- Password: `OperatoreTaranto2026!`
 
 Funzioni disponibili:
 
