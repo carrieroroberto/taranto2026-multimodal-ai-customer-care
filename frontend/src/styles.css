@@ -413,7 +413,7 @@
     min-height: 0;
   }
 
-  @media (max-width: 767px) {
+  @media (max-width: 800px) {
     .app-title-desktop {
       display: none;
     }
@@ -731,7 +731,7 @@
     filter: brightness(0.94);
   }
 
-  @media (max-width: 767px) {
+  @media (max-width: 800px) {
     .composer-shell .composer-image-action.composer-image-action-selected {
       display: none !important;
     }
@@ -1090,10 +1090,11 @@
   .welcome-suggestions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
+    flex-direction: column;
+    gap: 0.4rem;
     justify-content: center;
     width: 100%;
-    margin-top: 0.55rem;
+    margin-top: 0.4rem;
   }
 
   .welcome-suggestion-button {
@@ -1101,7 +1102,7 @@
     align-items: center;
     min-height: 2.15rem;
     max-width: 100%;
-    padding: 0.45rem 0.7rem;
+    padding: 0.5rem 0.7rem;
     border: 1px solid rgba(125, 211, 252, 0.2);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
@@ -2383,7 +2384,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 800px) {
   .operator-panel .ticket-list-cards {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -3328,7 +3329,7 @@
   font-weight: 400;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 800px) {
   .operator-avatar {
     width: 42px;
     height: 42px;
@@ -3627,13 +3628,13 @@
   height: 1.25rem;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 800px) {
   .operator-ticket-lightbox .image-lightbox-close {
     display: none;
   }
 
   .operator-ticket-modal {
-    width: min(94vw, 560px);
+    width: 94vw;
     height: min(94vh, 100%);
     max-height: 94vh;
     gap: 0.54rem;

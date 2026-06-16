@@ -880,7 +880,9 @@ function TicketCard({ isUnread = false, ticket, onClick }) {
         </span>
       </div>
       <div className="ticket-card-body">
-        <p>{ticket.summary || "Ticket senza summary disponibile."}</p>
+        <p className="ticket-card-summary" title={ticket.summary || "Ticket senza summary disponibile."}>
+          {ticket.summary || "Ticket senza summary disponibile."}
+        </p>
       </div>
       <div className="ticket-card-footer">
         <time className="ticket-card-date" dateTime={ticket.created_at || ""}>
