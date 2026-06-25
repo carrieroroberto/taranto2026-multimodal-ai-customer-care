@@ -1,7 +1,7 @@
 kpi,description,value,unit
 Domain Accuracy,Capacita di classificare correttamente il dominio della domanda,0.9262,percent
 Recall@5,Almeno un documento corretto tra i primi 5 risultati,0.7951,ratio
-Precision@5,Quota di documenti pertinenti tra i primi 5 risultati,0.2525,ratio
+Precision@5,Quota di documenti pertinenti tra i primi 5 risultati,0.7475,ratio
 MRR,Reciprocal rank medio del primo documento corretto,0.7204,ratio
 Source Coverage Rate,Percentuale di risposte supportate da almeno una fonte della KB,0.7907,percent
 Average Latency,Tempo medio di risposta end-to-end del sistema,56.550.282,ms
