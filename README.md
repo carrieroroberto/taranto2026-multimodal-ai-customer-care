@@ -447,7 +447,7 @@ docker cp talos-backend:/app/eval/outputs/results.csv eval/outputs/results.csv
 | --- | --- | --- |
 | Qualita informativa | Domain Accuracy | `domini_corretti / casi_con_dominio_atteso` |
 | Qualita informativa | Recall@5 | `casi_con_almeno_un_doc_rilevante_in_top5 / casi_valutati` |
-| Qualita informativa | Precision@5 | `media(|top5 ∩ rilevanti| / 5)` |
+| Qualita informativa | Precision@5 | `media(abs(top5 ∩ rilevanti) / 5)` |
 | Qualita informativa | MRR | `media(1 / rank_primo_documento_rilevante)` |
 | Qualita informativa | Source Coverage Rate | `risposte_con_fonti / risposte_valide` |
 | Performance tecnica | Average Latency | `somma_latenze / richieste` |
