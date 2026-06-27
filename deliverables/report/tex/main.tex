@@ -1,0 +1,118 @@
+\PassOptionsToPackage{table, dvipsnames}{xcolor}
+\documentclass[a4paper,oneside,12pt]{report}
+
+\usepackage[a4paper,margin=3cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{svg}
+\usepackage{tikz}
+\usepackage{amsmath}
+\usetikzlibrary{positioning}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xurl}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{yamlBlue}{RGB}{0,70,140}
+\definecolor{yamlGreen}{RGB}{0,120,80}
+\definecolor{yamlGray}{RGB}{90,90,90}
+\definecolor{yamlPurple}{RGB}{120,60,150}
+\definecolor{codeBg}{RGB}{248,248,248}
+
+\lstdefinelanguage{yaml}{
+  keywords={true,false,null,y,n,yes,no,on,off},
+  keywordstyle=\color{yamlPurple}\bfseries,
+  basicstyle=\ttfamily\scriptsize,
+  sensitive=false,
+  comment=[l]{\#},
+  commentstyle=\color{yamlGray}\itshape,
+  morestring=[b]',
+  morestring=[b]",
+  stringstyle=\color{yamlGreen},
+  literate=
+    {0}{{{\color{yamlPurple}0}}}1
+    {1}{{{\color{yamlPurple}1}}}1
+    {2}{{{\color{yamlPurple}2}}}1
+    {3}{{{\color{yamlPurple}3}}}1
+    {4}{{{\color{yamlPurple}4}}}1
+    {5}{{{\color{yamlPurple}5}}}1
+    {6}{{{\color{yamlPurple}6}}}1
+    {7}{{{\color{yamlPurple}7}}}1
+    {8}{{{\color{yamlPurple}8}}}1
+    {9}{{{\color{yamlPurple}9}}}1
+    {:}{{{\color{yamlBlue}:}}}1
+    {-}{{{\color{yamlBlue}-}}}1
+}
+
+\lstset{
+    language=yaml,
+    backgroundcolor=\color{codeBg},
+    basicstyle=\ttfamily\scriptsize,
+    breaklines=true,
+    breakatwhitespace=false,
+    columns=fullflexible,
+    keepspaces=true,
+    showstringspaces=false,
+    frame=single,
+    rulecolor=\color{yamlGray},
+    tabsize=2,
+    captionpos=b,
+    numbers=left,
+    numberstyle=\tiny\color{yamlGray},
+    numbersep=8pt
+}
+
+\usepackage[newfloat]{minted}
+\SetupFloatingEnvironment{listing}{name=Codice}
+\usepackage[font=small,skip=1pt]{caption}
+
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,allcolors=black,pageanchor=false}
+
+\pdfsuppresswarningpagegroup=1
+\setlength{\emergencystretch}{3em}
+\hbadness=10000
+\newcommand{\apiendpoint}[1]{\path{#1}}
+
+\setlist[itemize]{itemsep=2pt, topsep=4pt}
+\setlength{\parskip}{0.35em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.25}
+
+\begin{document}
+\frenchspacing
+
+\pagenumbering{gobble}
+
+\input{front}
+\input{abstract}
+\tableofcontents
+
+\cleardoublepage{}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\include{capitoli/01.introduzione}
+\include{capitoli/02.analisi-preliminare}
+\include{capitoli/03.implementazione}
+\include{capitoli/04.risultati}
+
+\cleardoublepage
+\addcontentsline{toc}{chapter}{Bibliografia}
+\nocite{*}
+\bibliographystyle{ieeetr}
+\bibliography{biblo}
+
+\include{app_docker}
+
+\end{document}
