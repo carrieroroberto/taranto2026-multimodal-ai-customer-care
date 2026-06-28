@@ -84,6 +84,12 @@ Servizi Docker:
 │   ├── test_dataset.jsonl    # Dataset testuale di valutazione
 │   └── outputs/
 │       └── results.csv       # Output CSV
+├── deliverables/
+│   ├── report/               
+│   │   ├── tex/              # LaTeX source code
+│   │   └── talos_report.pdf  # Compiled PDF written report
+│   └── presentation/          
+│       └── talos_presentation.pptx      # PowerPoint slides for oral presentation
 ├── frontend/
 │   ├── public/               # Manifest PWA, icone, asset pubblici
 │   ├── src/
@@ -98,6 +104,7 @@ Servizi Docker:
 │   └── Dockerfile
 ├── docker-compose.yml
 ├── run.bat
+├── run.sh
 ├── .env.example
 └── README.md
 ```
@@ -161,12 +168,18 @@ Su Windows:
 run.bat lite
 ```
 
+Su macOS:
+
+```bat
+run.sh lite
+```
+
 La modalità `lite` è consigliata se è configurata `GROQ_API_KEY`. Avvia frontend, backend, Postgres, pgAdmin, ChromaDB e Cloudflare, senza avviare Ollama locale.
 
 Per la modalità completa con Ollama:
 
 ```bat
-run.bat
+run.bat / run.sh
 ```
 
 Con Docker Compose:
