@@ -1,10 +1,12 @@
-# T.A.L.O.S. | Taranto 2026 AI Live Operator Support
+# T.A.L.O.S. (Taranto 2026 AI Live Operator Support)
 
-## Chatbot AI Multimodale di Customer Care per i Giochi del Mediterraneo
+## Chatbot AI multimodale di customer care per i Giochi del Mediterraneo 2026
 
 T.A.L.O.S. è una web app full-stack che integra una chat multilingua, una pipeline RAG basata su Knowledge Base, una dashboard operatore per la gestione dei ticket e un modulo di benchmarking KPI.
 
 L'obiettivo del progetto è fornire risposte automatiche esaustive, basate sulle fonti disponibili nella knowledge base, evitando allucinazioni e risposte inventate.
+
+<img width="1920" height="1080" alt="screen" src="https://github.com/user-attachments/assets/70760526-6803-4f98-99d9-87cf1d8a2478" />
 
 ## Funzionalità
 
@@ -27,26 +29,7 @@ L'obiettivo del progetto è fornire risposte automatiche esaustive, basate sulle
 - PWA installabile e testabile anche da mobile tramite tunnel HTTPS Cloudflare.
 
 ## Architettura
-
-```text
-Utente / Operatore
-      |
-      v
-Frontend React
-      |
-      | /api/*
-      v
-Backend FastAPI
-      |
-      +-- Postgres: conversazioni, messaggi, feedback, ticket, operatori
-      |
-      +-- ChromaDB: retrieval semantico sulla knowledge base
-      |
-      +-- Ollama o Groq: query planning, generazione, multimodale
-      |
-      v
-Risposta + fonti / ticket operatore / KPI
-```
+<img width="1054" height="720" alt="architecture" src="https://github.com/user-attachments/assets/2d45a94f-c45d-4c22-b939-f5babd91685c" />
 
 Servizi Docker:
 
