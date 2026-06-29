@@ -1,0 +1,20 @@
+Project Work TP - Sistema agentico multimodale e multifunzionale per il Supporto Clienti
+
+Nome progetto:
+T.A.L.O.S. (Taranto 2026 AI Live Operator Support)
+
+Membri del team:
+- Roberto Carriero, Ingegneria Informatica
+- Angelo Mastrangelo, Ingegneria Informatica
+- Ivano Di Ceglie, Ingegneria Gestionale
+- Giuseppe Fuscaldi, Ingegneria Gestionale
+
+Descrizione del progetto:
+T.A.L.O.S. è un sistema agentico multimodale e multifunzionale progettato per il supporto clienti nel contesto dei Giochi del Mediterraneo Taranto 2026. La soluzione integra un chatbot AI capace di gestire richieste testuali, vocali e visuali, fornendo risposte multilingua basate su una knowledge base strutturata e su una pipeline RAG. Il sistema include inoltre funzionalità di escalation verso operatori tramite ticket, dashboard operatore, gestione della knowledge base e valutazione delle prestazioni tramite metriche e KPI.
+
+Per consultare il materiale prodotto durante lo svolgimento del progetto, fare riferimento alle seguenti directory:
+- intermediate_deliverables: contiene le presentazioni e i report prodotti durante l’avanzamento del progetto e i documenti di pianificazione, come Gantt e WBS
+- final_report: contiene la relazione finale del progetto in PDF
+- final_presentation: contiene la presentazione PowerPoint finale per l’esposizione orale
+
+Per avviare il sistema, scaricare il codice sorgente dal repository e seguire le istruzioni contenute nel file README.
